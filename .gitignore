@@ -1,0 +1,10 @@
+/target/
+node_modules/
+.next/
+*.sqlite
+*.sqlite-*
+.env
+*.age
+/identity.txt
+/wallet/
+*.log

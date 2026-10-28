@@ -1,0 +1,19 @@
+{
+  "name": "shielded-lp-video",
+  "private": true,
+  "scripts": {
+    "dev": "remotion studio",
+    "render": "remotion render Demo out/shielded-lp-demo.mp4"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.465",
+    "@remotion/google-fonts": "4.0.465",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.465"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "typescript": "5.9.3"
+  }
+}

@@ -1,6 +1,6 @@
 # Shielded LP Router
 
-> Working name. Built for **ZECATHON**, track **Private Markets**, with a cross-chain angle (Zcash → THORChain).
+> Built for **ZECATHON**, track **Private Markets**, with a cross-chain angle (Zcash → THORChain).
 
 Shielded ZEC holders can now provide liquidity to THORChain's native ZEC pool **without publicly linking their shielded wealth to an LP position**. The tool is non-custodial: keys stay in your local wallet, there is no vault or pooled contract, and every transaction is built and signed on your machine.
 
@@ -75,45 +75,65 @@ LP_ACTIVE → WD_SENT → WD_RECEIVED → SHIELD_SENT → CLOSED
 - ZIP-317 fees and a v5/v6 transaction for the live consensus branch (v6 / NU6.3 today, so the NU7 rule that rejects v4 does not affect us).
 - **Pre-flight before every send:** ZEC is not halted and LP actions are not paused, the pool is `Available`, the memo fits in 80 bytes, and the signed transaction pays exactly the planned outputs. If any check fails, nothing is broadcast.
 
+## Two modes: testnet or mainnet
+
+Every command takes `-n test|main` (or `SLP_NETWORK`). Each network keeps its own wallet, identity and slice database under `./test/` or `./main/`, and `slp` refuses to run a wallet on the wrong network.
+
+| | Zcash side | THORChain side |
+| --- | --- | --- |
+| `-n test` | **Real testnet transactions (TAZ):** shielded funding, deposit with OP_RETURN memo, withdraw request, shield back to Ironwood | **Simulated.** THORChain has no testnet with ZEC, so a vault key derived from your own seed (BIP-44 account `slice_account + 1`) plays the vault. It credits the LP when the deposit is mined and answers a withdraw request with a real outbound tx (`OUT:<txid>` memo, minus a 44,132 zat outbound fee) |
+| `-n main` | Real ZEC | **Live THORChain** ZEC.ZEC pool, thornode and Midgard |
+
+The code path is the same in both modes except for the vault: the same planner, state machine, transaction builder and pre-flight checks run on testnet and mainnet.
+
 ## Run it
 
-Requirements: Rust (stable), Node 20+ with pnpm. Mainnet only. **Use small amounts.**
+Requirements: Rust (stable), Node 20+ with pnpm. **On mainnet, use small amounts.**
 
 ```sh
 cargo build --release          # produces ./target/release/slp
 alias slp=./target/release/slp
+cp .env.example .env           # set SLP_NETWORK=test or main
+set -a && source .env && set +a
+N=$SLP_NETWORK
 
-# 1. Wallet (keys stay in ./wallet, seed encrypted to ./identity.txt)
-slp wallet -w ./wallet init --name main -i ./identity.txt -n main
-#   or restore: slp wallet -w ./wallet restore-mnemonic --name main -i ./identity.txt -n main --birthday <height>
-slp wallet -w ./wallet list-addresses   # send ZEC to the unified address
-slp wallet -w ./wallet sync
-slp wallet -w ./wallet balance          # shows Ironwood / Orchard / Sapling / transparent
+# 1. Wallet (keys stay in ./$N/wallet, seed encrypted to ./$N/identity.txt)
+slp wallet -w ./$N/wallet init --name main -i ./$N/identity.txt -n $N
+#   or restore: slp wallet -w ./$N/wallet restore-mnemonic --name main -i ./$N/identity.txt -n $N --birthday <height>
+slp wallet -w ./$N/wallet list-addresses   # fund it (testnet: TAZ from https://zecfaucet.com)
+slp wallet -w ./$N/wallet sync
+slp wallet -w ./$N/wallet balance          # Ironwood / Orchard / Sapling / transparent
 
-# 2. Configure
-cp .env.example .env && set -a && source .env && set +a
-
-# 3. Plan, run, watch
-slp plan --amount 3 --denoms 1 --jitter 5m-30m
+# 2. Plan, run, watch
+slp plan --amount 0.3 --denoms 0.1 --jitter 1m-3m
 slp run                                 # resumable: stop and start any time
 slp status                              # slices + your aggregate position
-slp observer                            # only what Midgard shows the public
+slp observer                            # only what the public sees
 
-# 4. Exit: withdraw every slice and shield the proceeds back
+# 3. Exit: withdraw every slice and shield the proceeds back
 slp exit --all
 
-# Dashboard (reads `slp status --json` and `slp observer --json`)
+# Dashboard: Testnet / Mainnet switch, reads `slp status --json` and `slp observer --json`
 cd apps/dashboard && pnpm install && pnpm dev   # http://127.0.0.1:3000
 ```
 
 Every other upstream devtool command is still available (`slp wallet …`, `slp inspect …`, `slp pczt …`).
 
-Back up `slices.sqlite` together with your seed. The slice id is the address index, so positions can be re-derived from the seed. The table tells you which ones exist.
+Back up `./<network>/slices.sqlite` together with your seed. The slice id is the address index, so positions can be re-derived from the seed. The table tells you which ones exist.
+
+### The app
+
+`apps/dashboard` is the full app around `slp`: wallet balance and a fresh shielded receive address, a plan form with a live preview (slice count, total needed, size against the live pool depth), Start/Pause of the executor, Withdraw all, an activity log, and the two views side by side: **Your position** (the private aggregate) and **What the public sees** (each slice address alone, plus the live THORChain ZEC pool). It drives the local `slp` binary; nothing but `slp` touches your keys.
+
+### Hosted demo
+
+Without a local `slp` binary (for example on Vercel), the same app runs a **simulation in the browser**: a simulated 1 ZEC wallet, simulated transactions, 60× faster than real time, with the live THORChain pool depth and price. It is labelled as a simulation everywhere. `pnpm test` checks the simulator end to end.
 
 ## Tests
 
 ```sh
 cargo test --release slp::
+cd apps/dashboard && pnpm test   # simulator: plan -> run -> exit ends fully shielded
 ```
 
 The tests cover denomination splitting, jitter parsing, the state store, memo building and the 80-byte limit, outbound and refund parsing, TEX → `t1` decoding of the live vault, deterministic slice keys, a **signed add transaction that round-trips and decodes with the expected outputs (v6, 15,000 zat ZIP-317 fee)**, and a **shield-back transaction built into the Ironwood pool**.

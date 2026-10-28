@@ -8,3 +8,5 @@ node_modules/
 /identity.txt
 /wallet/
 *.log
+/test/
+/main/

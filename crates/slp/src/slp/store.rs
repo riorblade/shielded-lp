@@ -72,6 +72,8 @@ pub(crate) struct Slice {
     pub(crate) shield_to: Option<String>,
     pub(crate) note: Option<String>,
     pub(crate) error: Option<String>,
+    /// Unix seconds when the position was first seen active.
+    pub(crate) lp_since: Option<i64>,
     pub(crate) updated_at: i64,
 }
 
@@ -86,6 +88,9 @@ pub(crate) fn now() -> i64 {
 
 impl Store {
     pub(crate) fn open(path: &Path) -> anyhow::Result<Self> {
+        if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+            std::fs::create_dir_all(dir)?;
+        }
         let conn = Connection::open(path)?;
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS slices (
@@ -97,7 +102,7 @@ impl Store {
                 state TEXT NOT NULL,
                 exit_requested INTEGER NOT NULL DEFAULT 0,
                 fund_txid TEXT, add_txid TEXT, wd_txid TEXT, out_txid TEXT,
-                shield_txid TEXT, shield_to TEXT, note TEXT, error TEXT,
+                shield_txid TEXT, shield_to TEXT, note TEXT, error TEXT, lp_since INTEGER,
                 updated_at INTEGER NOT NULL
             );",
         )?;
@@ -148,7 +153,7 @@ impl Store {
         self.0.execute(
             "UPDATE slices SET scheduled_at=?2, state=?3, exit_requested=?4, fund_txid=?5,
                add_txid=?6, wd_txid=?7, out_txid=?8, shield_txid=?9, shield_to=?10,
-               note=?11, error=?12, updated_at=?13
+               note=?11, error=?12, lp_since=?14, updated_at=?13
              WHERE id=?1",
             params![
                 s.id,
@@ -163,7 +168,8 @@ impl Store {
                 s.shield_to,
                 s.note,
                 s.error,
-                now()
+                now(),
+                s.lp_since
             ],
         )?;
         Ok(())
@@ -187,6 +193,7 @@ fn from_row(r: &Row<'_>) -> rusqlite::Result<Slice> {
         shield_to: r.get("shield_to")?,
         note: r.get("note")?,
         error: r.get("error")?,
+        lp_since: r.get("lp_since")?,
         updated_at: r.get("updated_at")?,
     })
 }
@@ -215,6 +222,7 @@ mod tests {
             shield_to: None,
             note: None,
             error: None,
+            lp_since: None,
             updated_at: 0,
         };
         store.insert(&s).unwrap();

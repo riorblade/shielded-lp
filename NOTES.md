@@ -48,6 +48,15 @@ All checks below were run live against mainnet on **2026-10-28** (chain tip ≈ 
 
 Reserve per slice defaults to 0.001 ZEC (100,000 zat): add + withdraw (fee + 16,000 payload) + shield ≈ 66,000 zat, with margin.
 
+## Testnet mode (added 2026-10-28)
+
+- **THORChain has no usable testnet with ZEC.** The dev docs list every stagenet endpoint as "TBD" ("Stagenet endpoints are being transitioned"), and the stagenet URLs we tried (Nine Realms, Liquify) did not answer. So `-n test` simulates THORChain with a vault key from the user's own seed (`m/44'/1'/1001'/0/0`); all Zcash transactions are real testnet transactions.
+- lightwalletd testnet: `testnet.zec.rocks:443` works (tip 4,550,748, Ironwood balance line present).
+- **NU7 is active on testnet** since height 4,465,026 and our librustzcash revision knows it, so testnet txs are built for the NU7 branch.
+- **Mainnet NU7 height is still `None` in this revision.** NU7 mainnet is expected Nov 5, 2026: update librustzcash before then, or mainnet transactions will be built for the wrong branch.
+- Faucet: `https://zecfaucet.com` (JS app). `testnet.zecfaucet.com` did not resolve.
+- Explorer links in the dashboard: `testnet.zcashexplorer.app` / `mainnet.zcashexplorer.app`.
+
 ## Maya (stretch)
 
 Not attempted. THORChain only for the MVP.

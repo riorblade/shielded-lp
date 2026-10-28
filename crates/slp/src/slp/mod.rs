@@ -49,6 +49,8 @@ pub(crate) enum Command {
     Exit(Exit),
     /// Show only what a public observer sees on Midgard for each slice address
     Observer(Status),
+    /// Print a fresh shielded receive address for funding the wallet
+    Address(AddressCmd),
 }
 
 impl Command {
@@ -59,18 +61,24 @@ impl Command {
             Command::Status(c) => c.status().await,
             Command::Exit(c) => c.run().await,
             Command::Observer(c) => c.observer().await,
+            Command::Address(c) => c.run(),
         }
     }
 }
 
 #[derive(Debug, Args, Clone)]
 pub(crate) struct Common {
-    /// Wallet directory (created with `slp wallet -w <dir> init|restore-mnemonic`)
-    #[arg(short, long, env = "SLP_WALLET_DIR", default_value = "./wallet")]
-    wallet_dir: String,
+    /// Mode: "test" = Zcash testnet with a simulated THORChain vault (no real funds),
+    /// "main" = Zcash mainnet with the real THORChain ZEC pool.
+    #[arg(short = 'n', long, env = "SLP_NETWORK", value_parser = ["test", "main"])]
+    network: String,
+    /// Wallet directory [default: ./<network>/wallet]
+    #[arg(short, long, env = "SLP_WALLET_DIR")]
+    wallet_dir: Option<String>,
     /// Slice state database. Back it up: it maps slices to their key indexes.
-    #[arg(long, env = "SLP_STATE", default_value = "./slices.sqlite")]
-    state: PathBuf,
+    /// [default: ./<network>/slices.sqlite]
+    #[arg(long, env = "SLP_STATE")]
+    state: Option<PathBuf>,
     #[arg(long, env = "THORNODE_URL", default_value = thor::DEFAULT_THORNODE)]
     thornode: String,
     #[arg(long, env = "MIDGARD_URL", default_value = thor::DEFAULT_MIDGARD)]
@@ -78,19 +86,32 @@ pub(crate) struct Common {
 }
 
 impl Common {
+    fn wallet_dir(&self) -> String {
+        self.wallet_dir
+            .clone()
+            .unwrap_or_else(|| format!("./{}/wallet", self.network))
+    }
     fn store(&self) -> anyhow::Result<Store> {
-        Store::open(&self.state)
+        let path = self
+            .state
+            .clone()
+            .unwrap_or_else(|| format!("./{}/slices.sqlite", self.network).into());
+        Store::open(&path)
     }
     fn thor(&self) -> Thor {
         Thor::new(&self.thornode, &self.midgard)
+    }
+    /// On testnet there is no THORChain: a vault key from the user's own seed stands in.
+    fn simulated(&self) -> bool {
+        self.network == "test"
     }
 }
 
 #[derive(Debug, Args, Clone)]
 pub(crate) struct Signer {
-    /// age identity file that decrypts the wallet seed
+    /// age identity file that decrypts the wallet seed [default: ./<network>/identity.txt]
     #[arg(short, long, env = "SLP_IDENTITY")]
-    identity: String,
+    identity: Option<String>,
     /// Wallet account that funds slices and receives shielded proceeds
     /// (only needed if the wallet has more than one account)
     #[arg(long)]
@@ -103,9 +124,29 @@ pub(crate) struct Signer {
 }
 
 impl Signer {
-    fn seed(&self, wallet_dir: &str) -> anyhow::Result<(Network, SecretVec<u8>)> {
-        let mut config = WalletConfig::read(Some(wallet_dir))?;
-        let identities = age::IdentityFile::from_file(self.identity.clone())?.into_identities()?;
+    /// Fills in per-network defaults so later code sees a concrete identity path.
+    fn resolve(mut self, common: &Common) -> Self {
+        self.identity
+            .get_or_insert_with(|| format!("./{}/identity.txt", common.network));
+        self
+    }
+
+    fn identity(&self) -> &str {
+        self.identity.as_deref().expect("resolved")
+    }
+
+    fn seed(&self, common: &Common) -> anyhow::Result<(Network, SecretVec<u8>)> {
+        let mut config = WalletConfig::read(Some(common.wallet_dir()))?;
+        // Never let a mainnet wallet run in test mode (or the reverse).
+        if config.network().name() != common.network {
+            bail!(
+                "wallet {} is a '{}' wallet but --network is '{}'",
+                common.wallet_dir(),
+                config.network().name(),
+                common.network
+            );
+        }
+        let identities = age::IdentityFile::from_file(self.identity().to_string())?.into_identities()?;
         let seed = config
             .decrypt_seed(identities.iter().map(|i| i.as_ref() as _))?
             .ok_or_else(|| anyhow!("wallet has no seed (view-only wallets cannot run slices)"))?;
@@ -129,6 +170,12 @@ pub(crate) struct Plan {
     /// Extra ZEC per slice to pay the add, withdraw and shield transactions
     #[arg(long, default_value = "0.001")]
     reserve: String,
+    /// Show the split and schedule without saving anything (no seed needed)
+    #[arg(long)]
+    dry_run: bool,
+    /// Machine-readable output (used by the dashboard)
+    #[arg(long)]
+    json: bool,
     #[command(flatten)]
     common: Common,
     #[command(flatten)]
@@ -150,43 +197,100 @@ impl Plan {
         let reserve = parse_zec(&self.reserve)?;
         let mut rng = UnwrapErr(SysRng);
         let times = planner::schedule(slices.len(), now(), || rng.random_range(gap_min..=gap_max));
-
-        let (params, seed) = self.signer.seed(&self.common.wallet_dir)?;
-        let store = self.common.store()?;
-        let first = store.next_id()?;
         let total: u64 = slices.iter().map(|d| d + reserve).sum();
 
         // Single-sided adds move the pool price: show the size relative to pool depth.
-        if let Ok(pool) = self.common.thor().pool().await {
-            let depth: u64 = pool.balance_asset.parse().unwrap_or(0);
-            let biggest = slices[0];
-            println!(
-                "Pool {} depth: {} ZEC. Largest slice is {:.1}% of depth; single-sided adds incur slip and price exposure.",
-                thor::POOL,
-                fmt_zec(depth),
-                100.0 * biggest as f64 / depth.max(1) as f64
-            );
+        let depth = if self.common.simulated() {
+            None
+        } else {
+            self.common.thor().pool().await.ok().and_then(|p| p.balance_asset.parse::<u64>().ok())
+        };
+        let largest_pct = depth.map(|d| 100.0 * slices[0] as f64 / d.max(1) as f64);
+
+        // Addresses are derived only when the plan is saved (a preview needs no seed).
+        let mut planned = vec![];
+        if !self.dry_run {
+            let signer = self.signer.resolve(&self.common);
+            let (params, seed) = signer.seed(&self.common)?;
+            let store = self.common.store()?;
+            let first = store.next_id()?;
+            for (i, (denom, at)) in slices.iter().zip(&times).enumerate() {
+                let id = first + i as u32;
+                let key = chain::slice_key(&params, seed.expose_secret(), signer.slice_account, id)?;
+                let s = Slice::planned(id, chain::encode_t(&params, &key.addr), *denom, reserve, *at);
+                store.insert(&s)?;
+                planned.push(s);
+            }
         }
 
-        for (i, (denom, at)) in slices.iter().zip(times).enumerate() {
-            let id = first + i as u32;
-            let key = chain::slice_key(&params, seed.expose_secret(), self.signer.slice_account, id)?;
-            let s = Slice::planned(id, chain::encode_t(&params, &key.addr), *denom, reserve, at);
-            store.insert(&s)?;
+        if self.json {
+            let out = json!({
+                "saved": !self.dry_run,
+                "slices": slices.iter().zip(&times).enumerate().map(|(i, (d, t))| json!({
+                    "denom": d,
+                    "scheduled_at": t,
+                    "id": planned.get(i).map(|s| s.id),
+                    "address": planned.get(i).map(|s| s.address.clone()),
+                })).collect::<Vec<_>>(),
+                "reserve_per_slice": reserve,
+                "total_needed": total,
+                "leftover": leftover,
+                "pool_depth": depth,
+                "largest_pct_of_depth": largest_pct,
+                "network": self.common.network,
+            });
+            println!("{}", serde_json::to_string_pretty(&out)?);
+            return Ok(());
+        }
+
+        if let (Some(d), Some(p)) = (depth, largest_pct) {
             println!(
-                "slice #{id:<3} {:>12} ZEC  at {}  {}",
-                fmt_zec(*denom),
-                fmt_time(at),
-                s.address
+                "Pool {} depth: {} ZEC. Largest slice is {p:.1}% of depth; single-sided adds incur slip and price exposure.",
+                thor::POOL,
+                fmt_zec(d)
             );
         }
+        for (i, (denom, at)) in slices.iter().zip(&times).enumerate() {
+            let addr = planned.get(i).map_or("(preview)", |s| s.address.as_str());
+            println!("slice #{i:<3} {:>12} ZEC  at {}  {addr}", fmt_zec(*denom), fmt_time(*at));
+        }
         println!(
-            "Planned {} slices; needs {} ZEC shielded (incl. reserves). {} ZEC stays shielded.",
+            "{} {} slices; needs {} ZEC shielded (incl. reserves). {} ZEC stays shielded.",
+            if self.dry_run { "Preview:" } else { "Planned" },
             slices.len(),
             fmt_zec(total),
             fmt_zec(leftover)
         );
-        println!("Next: `slp run`");
+        if !self.dry_run {
+            println!("Next: `slp run -n {}`", self.common.network);
+        }
+        Ok(())
+    }
+}
+
+// ---------------------------------------------------------------- address
+
+#[derive(Debug, Args)]
+pub(crate) struct AddressCmd {
+    /// Machine-readable output
+    #[arg(long)]
+    json: bool,
+    /// Wallet account (only needed if the wallet has more than one account)
+    #[arg(long)]
+    account: Option<Uuid>,
+    #[command(flatten)]
+    common: Common,
+}
+
+impl AddressCmd {
+    /// A fresh shielded receive address. Payments to it land in the Ironwood pool.
+    fn run(self) -> anyhow::Result<()> {
+        let (ua, _) = fresh_ironwood_address(&self.common.wallet_dir(), self.account)?;
+        if self.json {
+            println!("{}", json!({"address": ua, "network": self.common.network}));
+        } else {
+            println!("{ua}");
+        }
         Ok(())
     }
 }
@@ -209,6 +313,7 @@ impl Slice {
             shield_to: None,
             note: None,
             error: None,
+            lp_since: None,
             updated_at: 0,
         }
     }
@@ -290,26 +395,41 @@ struct Exec {
     signer: Signer,
     store: Store,
     thor: Thor,
+    /// Testnet only: stands in for THORChain's vault.
+    sim_vault: Option<chain::SliceKey>,
     client: chain::Client,
     shield_delay: (u64, u64),
     synced: bool,
 }
 
+/// What a simulated THORChain keeps as its outbound fee (same as the live ZEC outbound_fee).
+const SIM_OUTBOUND_FEE: u64 = 44_132;
+
 impl Run {
     async fn run(self) -> anyhow::Result<()> {
-        let (params, seed) = self.signer.seed(&self.common.wallet_dir)?;
-        let client = self
-            .signer
-            .connection
-            .connect(params, Some(&self.common.wallet_dir))
-            .await?;
+        let signer = self.signer.clone().resolve(&self.common);
+        let wallet_dir = self.common.wallet_dir();
+        let (params, seed) = signer.seed(&self.common)?;
+        let client = signer.connection.connect(params, Some(&wallet_dir)).await?;
+        let sim_vault = if self.common.simulated() {
+            // A separate BIP-44 account from the slices, so it never collides with them.
+            let vault = chain::slice_key(&params, seed.expose_secret(), signer.slice_account + 1, 0)?;
+            println!(
+                "Testnet mode: simulated THORChain vault is {}",
+                chain::encode_t(&params, &vault.addr)
+            );
+            Some(vault)
+        } else {
+            None
+        };
         let mut ex = Exec {
             params,
             seed,
-            wallet_dir: self.common.wallet_dir.clone(),
-            signer: self.signer.clone(),
+            wallet_dir,
+            signer,
             store: self.common.store()?,
             thor: self.common.thor(),
+            sim_vault,
             client,
             shield_delay: parse_jitter(&self.shield_delay)?,
             synced: false,
@@ -376,6 +496,28 @@ impl Exec {
         chain::utxos(&mut self.client, &s.address).await
     }
 
+    /// The vault to pay and the live dust threshold, after pre-flight checks.
+    async fn inbound(&self) -> anyhow::Result<(transparent::address::TransparentAddress, u64)> {
+        if let Some(v) = &self.sim_vault {
+            return Ok((v.addr, 15_000));
+        }
+        let inbound = self.thor.preflight().await?;
+        Ok((
+            chain::decode_inbound(&self.params, &inbound.address)?,
+            inbound.dust_threshold(),
+        ))
+    }
+
+    /// Simulated vault: mined UTXOs it holds that came from `txids`.
+    async fn sim_vault_utxos(&mut self, txids: &[&str]) -> anyhow::Result<Vec<chain::Utxo>> {
+        let addr = chain::encode_t(&self.params, &self.sim_vault.as_ref().unwrap().addr);
+        Ok(chain::utxos(&mut self.client, &addr)
+            .await?
+            .into_iter()
+            .filter(|u| txids.contains(&u.txid.as_str()))
+            .collect())
+    }
+
     /// Advances one slice by at most one state.
     async fn step(&mut self, s: &mut Slice) -> anyhow::Result<()> {
         match s.state {
@@ -385,7 +527,7 @@ impl Exec {
                     s.state = State::Funded;
                     return Ok(());
                 }
-                self.thor.preflight().await?;
+                self.inbound().await?;
                 self.sync().await?;
                 let txid = self.fund(&s.address, s.denom + s.reserve).await?;
                 s.fund_txid = Some(txid);
@@ -397,8 +539,7 @@ impl Exec {
                 }
             }
             State::Funded => {
-                let inbound = self.thor.preflight().await?;
-                let vault = chain::decode_inbound(&self.params, &inbound.address)?;
+                let (vault, _) = self.inbound().await?;
                 let memo = thor::add_memo();
                 thor::check_memo(&memo)?;
                 let utxos = self.utxos(s).await?;
@@ -407,8 +548,17 @@ impl Exec {
                 s.add_txid = Some(chain::send(&self.params, &mut self.client, &key, &utxos, &dest).await?);
                 s.state = State::AddSent;
             }
+            State::AddSent if self.sim_vault.is_some() => {
+                // Simulated THORChain credits the LP once the deposit is mined.
+                let add = s.add_txid.clone().unwrap_or_default();
+                if !self.sim_vault_utxos(&[&add]).await?.is_empty() {
+                    s.lp_since = Some(now());
+                    s.state = State::LpActive;
+                }
+            }
             State::AddSent => {
                 if self.thor.lp(&s.address).await?.is_some_and(|lp| lp.is_active()) {
+                    s.lp_since = Some(now());
                     s.state = State::LpActive;
                 } else if let Some(ob) = self.thor.outbound(s.add_txid.as_deref().unwrap_or("")).await? {
                     if ob.refund {
@@ -421,17 +571,40 @@ impl Exec {
             }
             State::LpActive => {
                 // Only reached when an exit was requested.
-                let inbound = self.thor.preflight().await?;
-                let vault = chain::decode_inbound(&self.params, &inbound.address)?;
+                let (vault, dust) = self.inbound().await?;
                 let memo = thor::withdraw_memo(10_000);
                 thor::check_memo(&memo)?;
                 // Withdraw requests must carry at least the dust threshold; add a small margin.
-                let amount = inbound.dust_threshold() + 1_000;
+                let amount = dust + 1_000;
                 let utxos = self.utxos(s).await?;
                 let key = self.key(s)?;
                 let dest = chain::Dest::Thor { vault, amount, memo };
                 s.wd_txid = Some(chain::send(&self.params, &mut self.client, &key, &utxos, &dest).await?);
                 s.state = State::WdSent;
+            }
+            State::WdSent if self.sim_vault.is_some() && s.out_txid.is_none() => {
+                // Simulated THORChain: once the withdraw request is mined, the vault pays the
+                // deposit back (minus an outbound fee) with an `OUT:<txid>` memo, like THORChain.
+                let (add, wd) = (s.add_txid.clone().unwrap_or_default(), s.wd_txid.clone().unwrap_or_default());
+                let held = self.sim_vault_utxos(&[&add, &wd]).await?;
+                if held.iter().any(|u| u.txid == wd) {
+                    let to = chain::decode_inbound(&self.params, &s.address)?;
+                    let memo = format!("OUT:{}", wd.to_uppercase());
+                    thor::check_memo(&memo)?;
+                    let dest = chain::Dest::Thor { vault: to, amount: s.denom - SIM_OUTBOUND_FEE, memo };
+                    let vault = self.sim_vault.take().unwrap();
+                    let sent = chain::send(&self.params, &mut self.client, &vault, &held, &dest).await;
+                    self.sim_vault = Some(vault);
+                    s.out_txid = Some(sent?);
+                }
+            }
+            State::WdSent if self.sim_vault.is_some() => {
+                let out = s.out_txid.clone().unwrap_or_default();
+                if self.utxos(s).await?.iter().any(|u| u.txid == out) {
+                    let (a, b) = self.shield_delay;
+                    s.scheduled_at = now() + UnwrapErr(SysRng).random_range(a..=b) as i64;
+                    s.state = State::WdReceived;
+                }
             }
             State::WdSent => {
                 let wd = s.wd_txid.clone().unwrap_or_default();
@@ -446,7 +619,7 @@ impl Exec {
                 }
             }
             State::WdReceived => {
-                let (ua, to) = self.fresh_ironwood_address()?;
+                let (ua, to) = fresh_ironwood_address(&self.wallet_dir, self.signer.account)?;
                 let utxos = self.utxos(s).await?;
                 let key = self.key(s)?;
                 let dest = chain::Dest::Shield { to };
@@ -493,25 +666,29 @@ impl Exec {
         self.synced = false;
         Ok(txid.to_string())
     }
+}
 
-    /// A never-used address of the user's account with only an Orchard-format receiver,
-    /// which post-NU6.3 transactions pay through the Ironwood pool.
-    fn fresh_ironwood_address(&self) -> anyhow::Result<(String, orchard::Address)> {
-        let (_, db_path) = get_db_paths(Some(&self.wallet_dir));
-        let mut db = WalletDb::for_path(db_path, self.params, SystemClock, UnwrapErr(SysRng))?;
-        let account = select_account(&db, self.signer.account)?;
-        let req = UnifiedAddressRequest::custom(
-            ReceiverRequirement::Require,
-            ReceiverRequirement::Omit,
-            ReceiverRequirement::Omit,
-        )
-        .map_err(|e| anyhow!("{e}"))?;
-        let (ua, _) = db
-            .get_next_available_address(account.id(), req)?
-            .ok_or_else(|| anyhow!("account not found"))?;
-        let to = *ua.orchard().ok_or_else(|| anyhow!("no Orchard receiver"))?;
-        Ok((ua.encode(&self.params), to))
-    }
+/// A never-used address of the user's account with only an Orchard-format receiver,
+/// which post-NU6.3 transactions pay through the Ironwood pool.
+fn fresh_ironwood_address(
+    wallet_dir: &str,
+    account: Option<Uuid>,
+) -> anyhow::Result<(String, orchard::Address)> {
+    let params = crate::config::get_wallet_network(Some(wallet_dir))?;
+    let (_, db_path) = get_db_paths(Some(wallet_dir));
+    let mut db = WalletDb::for_path(db_path, params, SystemClock, UnwrapErr(SysRng))?;
+    let account = select_account(&db, account)?;
+    let req = UnifiedAddressRequest::custom(
+        ReceiverRequirement::Require,
+        ReceiverRequirement::Omit,
+        ReceiverRequirement::Omit,
+    )
+    .map_err(|e| anyhow!("{e}"))?;
+    let (ua, _) = db
+        .get_next_available_address(account.id(), req)?
+        .ok_or_else(|| anyhow!("account not found"))?;
+    let to = *ua.orchard().ok_or_else(|| anyhow!("no Orchard receiver"))?;
+    Ok((ua.encode(&params), to))
 }
 
 struct FundCtx<'a>(&'a Signer);
@@ -521,7 +698,7 @@ impl send::PaymentContext for FundCtx<'_> {
         self.0.account
     }
     fn age_identities(&self) -> anyhow::Result<Vec<Box<dyn age::Identity + Send + Sync>>> {
-        Ok(age::IdentityFile::from_file(self.0.identity.clone())?.into_identities()?)
+        Ok(age::IdentityFile::from_file(self.0.identity().to_string())?.into_identities()?)
     }
     fn connection_args(&self) -> &ConnectionArgs {
         &self.0.connection
@@ -555,11 +732,21 @@ impl Status {
     async fn status(self) -> anyhow::Result<()> {
         let store = self.common.store()?;
         let thor = self.common.thor();
+        let sim = self.common.simulated();
         let slices = store.all()?;
         let mut rows = vec![];
         let (mut in_lp, mut redeem) = (0u64, 0u64);
         for s in &slices {
-            let lp = if matches!(s.state, State::AddSent | State::LpActive | State::WdSent) {
+            let lp = if sim {
+                // Simulated THORChain: the position is exactly the deposit, until paid out.
+                let open = s.state == State::LpActive || (s.state == State::WdSent && s.out_txid.is_none());
+                open.then(|| thor::Lp {
+                    units: s.denom.to_string(),
+                    asset_deposit_value: s.denom.to_string(),
+                    asset_redeem_value: Some(s.denom.to_string()),
+                    rune_redeem_value: None,
+                })
+            } else if matches!(s.state, State::AddSent | State::LpActive | State::WdSent) {
                 thor.lp(&s.address).await.ok().flatten().filter(|l| l.is_active())
             } else {
                 None
@@ -570,7 +757,7 @@ impl Status {
             }
             rows.push((s, lp));
         }
-        let pool = thor.pool().await.ok();
+        let pool = if sim { None } else { thor.pool().await.ok() };
 
         if self.json {
             let out = json!({
@@ -581,6 +768,8 @@ impl Status {
                     "redeemable_zat": redeem,
                 },
                 "pool": pool.as_ref().map(|p| json!({"status": p.status, "balance_asset": p.balance_asset, "trading_halted": p.trading_halted})),
+                "network": self.common.network,
+                "thorchain": if sim { "simulated" } else { "live" },
                 "now": now(),
             });
             println!("{}", serde_json::to_string_pretty(&out)?);
@@ -623,17 +812,25 @@ impl Status {
         let store = self.common.store()?;
         let thor = self.common.thor();
         // Sorted by address, not slice id: the observer view carries no owner ordering.
-        let mut addrs: Vec<String> = store
-            .all()?
-            .into_iter()
-            .filter(|s| s.add_txid.is_some())
-            .map(|s| s.address)
-            .collect();
-        addrs.sort();
+        let mut slices: Vec<Slice> = store.all()?.into_iter().filter(|s| s.add_txid.is_some()).collect();
+        slices.sort_by(|a, b| a.address.cmp(&b.address));
         let mut out = vec![];
-        for a in addrs {
-            let member = thor.member(&a).await?;
-            out.push(json!({"address": a, "midgard": member}));
+        for s in slices {
+            let member = if self.common.simulated() {
+                // Same shape as Midgard's /v2/member, built only from public chain facts.
+                let withdrawn = if s.out_txid.is_some() { s.denom } else { 0 };
+                Some(json!({"simulated": true, "pools": [{
+                    "pool": thor::POOL,
+                    "assetAddress": s.address,
+                    "assetAdded": s.denom.to_string(),
+                    "assetWithdrawn": withdrawn.to_string(),
+                    "dateFirstAdded": s.lp_since.map(|t| t.to_string()),
+                }]}))
+            } else {
+                thor.member(&s.address).await?
+            };
+            // The deposit tx is public anyway: it is how anyone finds this address.
+            out.push(json!({"address": s.address, "add_txid": s.add_txid, "midgard": member}));
         }
         if self.json {
             println!("{}", serde_json::to_string_pretty(&out)?);

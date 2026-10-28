@@ -1,16 +1,10 @@
-import { slpBackground } from "../slp";
+import { guard, runLog, slpBackground, stopRun } from "../slp";
 
 export async function POST(req) {
-  // A custom header forces a CORS preflight, so other websites cannot trigger this.
-  if (req.headers.get("x-slp") !== "1") {
-    return Response.json({ error: "missing x-slp header" }, { status: 403 });
-  }
-  if (!process.env.SLP_IDENTITY) {
-    return Response.json(
-      { error: "Set SLP_IDENTITY before starting the dashboard, or run `slp exit --all` in a terminal." },
-      { status: 400 },
-    );
-  }
-  const pid = slpBackground(["exit", "--all"], "exit.log");
-  return Response.json({ started: true, pid, log: "exit.log" });
+  const [network, denied] = await guard(req);
+  if (denied) return denied;
+  // `slp exit` marks the slices and then runs the executor itself; avoid two executors.
+  stopRun(network);
+  const pid = slpBackground(["exit", "-n", network, "--all"], runLog(network));
+  return Response.json({ started: true, pid });
 }

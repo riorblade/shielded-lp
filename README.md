@@ -79,16 +79,17 @@ LP_ACTIVE → WD_SENT → WD_RECEIVED → SHIELD_SENT → CLOSED
 - ZIP-317 fees and a v5/v6 transaction for the live consensus branch (v6 / NU6.3 today, so the NU7 rule that rejects v4 does not affect us).
 - **Pre-flight before every send:** ZEC is not halted and LP actions are not paused, the pool is `Available`, the memo fits in 80 bytes, and the signed transaction pays exactly the planned outputs. If any check fails, nothing is broadcast.
 
-## Two modes: testnet or mainnet
+## Ways to run it
 
-Every command takes `-n test|main` (or `SLP_NETWORK`). Each network keeps its own wallet, identity and slice database under `./test/` or `./main/`, and `slp` refuses to run a wallet on the wrong network.
+| | Where | Wallet | THORChain | For |
+| --- | --- | --- | --- | --- |
+| **Demo** | https://shielded-lp.vercel.app, no install | Simulated in the browser (1 ZEC, 60× speed) | Live pool data, simulated deposits | Anyone who wants to see how it works |
+| **Mainnet** | Your computer (`-n main`, the default in the app) | Your real wallet, keys stay local | Live ZEC.ZEC pool | Using it with real ZEC |
+| **Testnet** (developers) | Your computer (`-n test`) | Real testnet wallet (TAZ) | Simulated by a vault key from your own seed | Testing the Zcash side without real funds |
 
-| | Zcash side | THORChain side |
-| --- | --- | --- |
-| `-n test` | **Real testnet transactions (TAZ):** shielded funding, deposit with OP_RETURN memo, withdraw request, shield back to Ironwood | **Simulated.** THORChain has no testnet with ZEC, so a vault key derived from your own seed (BIP-44 account `slice_account + 1`) plays the vault. It credits the LP when the deposit is mined and answers a withdraw request with a real outbound tx (`OUT:<txid>` memo, minus a 44,132 zat outbound fee) |
-| `-n main` | Real ZEC | **Live THORChain** ZEC.ZEC pool, thornode and Midgard |
+Each network keeps its own wallet, identity and slice database under `./main/` or `./test/`, and `slp` refuses to run a wallet on the wrong network. The app shows the testnet switch only once a `./test/wallet` exists.
 
-The code path is the same in both modes except for the vault: the same planner, state machine, transaction builder and pre-flight checks run on testnet and mainnet.
+On testnet, THORChain has no ZEC pool, so a vault key derived from your seed (BIP-44 account `slice_account + 1`) plays the vault: it credits the LP when the deposit is mined and answers a withdraw request with a real outbound tx (`OUT:<txid>` memo, minus a 44,132 zat outbound fee). Every Zcash transaction (shielded funding, deposit with OP_RETURN memo, withdraw request, shield back to Ironwood) is real. The code path is the same as mainnet except for the vault. Note: public TAZ faucets were offline or rate-limited when we built this, so getting testnet coins may take a manual request on the Zcash forum.
 
 ## Run it
 
@@ -97,14 +98,14 @@ Requirements: Rust (stable), Node 20+ with pnpm. **On mainnet, use small amounts
 ```sh
 cargo build --release          # produces ./target/release/slp
 alias slp=./target/release/slp
-cp .env.example .env           # set SLP_NETWORK=test or main
+cp .env.example .env           # SLP_NETWORK=main (or test for developers)
 set -a && source .env && set +a
 N=$SLP_NETWORK
 
 # 1. Wallet (keys stay in ./$N/wallet, seed encrypted to ./$N/identity.txt)
 slp wallet -w ./$N/wallet init --name main -i ./$N/identity.txt -n $N
 #   or restore: slp wallet -w ./$N/wallet restore-mnemonic --name main -i ./$N/identity.txt -n $N --birthday <height>
-slp wallet -w ./$N/wallet list-addresses   # fund it (testnet: TAZ from https://zecfaucet.com)
+slp wallet -w ./$N/wallet list-addresses   # fund it: send ZEC from any wallet
 slp wallet -w ./$N/wallet sync
 slp wallet -w ./$N/wallet balance          # Ironwood / Orchard / Sapling / transparent
 
@@ -117,7 +118,7 @@ slp observer                            # only what the public sees
 # 3. Exit: withdraw every slice and shield the proceeds back
 slp exit --all
 
-# Dashboard: Testnet / Mainnet switch, reads `slp status --json` and `slp observer --json`
+# Dashboard: Mainnet (Testnet switch appears if ./test/wallet exists), reads `slp status --json` and `slp observer --json`
 cd apps/dashboard && pnpm install && pnpm dev   # http://127.0.0.1:3000
 ```
 

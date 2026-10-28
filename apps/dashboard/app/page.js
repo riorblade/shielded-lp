@@ -261,8 +261,9 @@ function Install() {
       <p className="eyebrow mono">Install</p>
       <h2 className="display">Five steps to your own copy.</h2>
       <p className="lede">
-        Needs macOS or Linux, <a href="https://rustup.rs">Rust</a>, Node 20+ and <a href="https://pnpm.io">pnpm</a>. Swap{" "}
-        <code>main</code> for <code>test</code> to practise on Zcash testnet first (THORChain is simulated there).
+        Needs macOS or Linux, <a href="https://rustup.rs">Rust</a>, Node 20+ and <a href="https://pnpm.io">pnpm</a>. Just want
+        to see it work? <Link href="/app">The demo</Link> runs the same app in your browser with a simulated wallet and no
+        install.
       </p>
       <ol>
         {INSTALL.map(([t, d, cmd], i) => (

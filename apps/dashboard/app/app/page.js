@@ -383,15 +383,24 @@ export default function App() {
           </button>
         </nav>
         <div className="bar-right">
-          <Seg
-            label="Network"
-            value={network}
-            onChange={setNetwork}
-            options={[
-              ["main", "Mainnet"],
-              ["test", "Testnet"],
-            ]}
-          />
+          {sim ? (
+            <span className="mode-chip" title="Wallet and transactions are simulated in your browser">
+              Demo
+            </span>
+          ) : env?.wallets?.test ? (
+            // Testnet is a developer mode: it only shows up once a ./test wallet exists.
+            <Seg
+              label="Network"
+              value={network}
+              onChange={setNetwork}
+              options={[
+                ["main", "Mainnet"],
+                ["test", "Testnet (dev)"],
+              ]}
+            />
+          ) : (
+            <span className="mode-chip live">Mainnet</span>
+          )}
           {hasWallet && (
             <span className="wallet-chip" title="Shielded, spendable">
               <span className="dot-shield" />
@@ -431,7 +440,7 @@ export default function App() {
               <span className="badge">
                 Full range <Hint>There is no min/max price to set, unlike Uniswap v3. Your range is 0 → ∞.</Hint>
               </span>
-              <span className="badge">{network === "main" ? "Live THORChain" : "Simulated THORChain"}</span>
+              <span className="badge">{network === "main" ? "Live pool data" : "Simulated THORChain"}</span>
             </div>
           </section>
 

@@ -1,0 +1,46 @@
+...@_theme
+
+direction: right
+
+classes: {
+  phase: {
+    style: {
+      fill: "#201D2C"
+      stroke: "#3A364B"
+      stroke-width: 2
+      border-radius: 14
+      font-color: "#F6F4FB"
+      font: mono
+      font-size: 15
+    }
+  }
+  step: {
+    style: {
+      stroke: "#F4B728"
+      stroke-width: 2
+      font-color: "#A19EB4"
+      font-size: 15
+    }
+  }
+}
+
+fund: "1 FUND\n\nPLANNED\nFUNDING_SENT\nFUNDED" {class: phase}
+join: "2 JOIN POOL\n\nADD_SENT" {class: phase}
+earn: "3 EARNING\n\nLP_ACTIVE" {
+  class: phase
+  style: {fill: "#2ED8B6"; stroke: "#2ED8B6"; font-color: "#0D0C14"; bold: true}
+}
+withdraw: "4 WITHDRAW\n\nWD_SENT\nWD_RECEIVED" {class: phase}
+shield: "5 SHIELD BACK\n\nSHIELD_SENT\nCLOSED" {
+  class: phase
+  style: {fill: "#F4B728"; stroke: "#F4B728"; font-color: "#0D0C14"; bold: true}
+}
+
+fund -> join: "deposit" {class: step}
+join -> earn: "LP seen" {class: step}
+earn -> withdraw: "you exit" {class: step}
+withdraw -> shield: "random delay" {class: step}
+join -> withdraw: "refunded" {
+  class: step
+  style: {stroke: "#F472B6"; stroke-dash: 4}
+}

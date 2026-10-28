@@ -1,0 +1,101 @@
+# Shared brand styling for every diagram (Zcash yellow on ink, like the app).
+vars: {
+  d2-config: {
+    layout-engine: elk
+    pad: 48
+    theme-overrides: {
+      N1: "#F6F4FB"
+      N2: "#A19EB4"
+      N3: "#6E6A82"
+      N4: "#2B2838"
+      N5: "#201D2C"
+      N6: "#16141F"
+      N7: "#0D0C14"
+      B1: "#F4B728"
+      B2: "#F4B728"
+      B3: "#2B2838"
+      B4: "#201D2C"
+      B5: "#16141F"
+      B6: "#16141F"
+      AA2: "#2ED8B6"
+      AA4: "#16141F"
+      AA5: "#16141F"
+      AB4: "#16141F"
+      AB5: "#16141F"
+    }
+  }
+}
+style.fill: "#0D0C14"
+
+classes: {
+  zone: {
+    style: {
+      fill: "#16141F"
+      stroke: "#2B2838"
+      stroke-width: 2
+      border-radius: 20
+      font-color: "#A19EB4"
+      font-size: 22
+      bold: true
+    }
+  }
+  node: {
+    style: {
+      fill: "#201D2C"
+      stroke: "#3A364B"
+      stroke-width: 2
+      border-radius: 14
+      font-color: "#F6F4FB"
+      font-size: 18
+    }
+  }
+  shielded: {
+    style: {
+      fill: "#F4B728"
+      stroke: "#F4B728"
+      border-radius: 14
+      font-color: "#0D0C14"
+      font-size: 18
+      bold: true
+    }
+  }
+  public: {
+    style: {
+      fill: "#201D2C"
+      stroke: "#F472B6"
+      stroke-width: 2
+      stroke-dash: 4
+      border-radius: 14
+      font-color: "#F6F4FB"
+      font-size: 17
+    }
+  }
+  thor: {
+    style: {
+      fill: "#2ED8B6"
+      stroke: "#2ED8B6"
+      border-radius: 14
+      font-color: "#0D0C14"
+      font-size: 18
+      bold: true
+    }
+  }
+  in: {
+    style: {
+      stroke: "#F4B728"
+      stroke-width: 3
+      font-color: "#F6F4FB"
+      font-size: 16
+      animated: true
+    }
+  }
+  out: {
+    style: {
+      stroke: "#2ED8B6"
+      stroke-width: 3
+      font-color: "#F6F4FB"
+      font-size: 16
+      animated: true
+    }
+  }
+}

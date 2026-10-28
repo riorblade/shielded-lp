@@ -1,0 +1,24 @@
+...@_theme
+
+flow: "" {
+  shape: sequence_diagram
+  style.fill: "#0D0C14"
+  style.stroke: "#0D0C14"
+
+  wallet: "Your shielded wallet\nIronwood, private" {class: shielded}
+  slice: "Slice address t1…\nfresh per slice, public" {class: public}
+  pool: "THORChain ZEC.ZEC pool\nfull range" {class: thor}
+
+  enter: Join, one slice at a time {
+    style: {fill: "#14121C"; stroke: "#2B2838"; font-color: "#A19EB4"}
+    wallet -> slice: "1  fund a standard size, at a random time" {class: in}
+    slice -> pool: "2  deposit with memo +:ZEC.ZEC" {class: in}
+    pool -> pool: "earns fees, always in range" {class: out}
+  }
+  exit: Exit, each slice on its own {
+    style: {fill: "#14121C"; stroke: "#2B2838"; font-color: "#A19EB4"}
+    slice -> pool: "3  withdraw request -:ZEC.ZEC:10000" {class: out}
+    pool -> slice: "4  ZEC sent back" {class: out}
+    slice -> wallet: "5  shield back to a fresh Ironwood address" {class: out}
+  }
+}

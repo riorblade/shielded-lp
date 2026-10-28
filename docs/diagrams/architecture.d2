@@ -1,0 +1,29 @@
+...@_theme
+
+direction: right
+
+machine: Your computer {
+  class: zone
+  app: "The app\n127.0.0.1:3000" {class: node}
+  slp: "slp (Rust)\nplans, builds, checks\nand signs every tx" {class: shielded}
+  keys: "Encrypted seed\nwallet db" {
+    class: node
+    shape: cylinder
+  }
+  state: "slices.sqlite" {
+    class: node
+    shape: cylinder
+  }
+  app -> slp: "runs" {class: in}
+  slp -> keys {class: in}
+  slp -> state {class: in}
+}
+
+public: Public infrastructure {
+  class: zone
+  lwd: "Zcash mainnet\nvia lightwalletd" {class: node}
+  thor: "THORChain\nthornode, Midgard" {class: thor}
+}
+
+machine.slp -> public.lwd: "signed txs" {class: in}
+machine.slp -> public.thor: "reads pool + LP" {class: out}

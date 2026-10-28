@@ -6,8 +6,8 @@ const sans = Familjen_Grotesk({ subsets: ["latin"], variable: "--sans" });
 const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--mono" });
 
 export const metadata = {
-  title: "Shielded LP",
-  description: "Your private THORChain ZEC position, next to what the public sees.",
+  title: "shielded-lp",
+  description: "Provide THORChain ZEC liquidity from shielded funds without linking your wallet to a public position.",
 };
 
 export default function RootLayout({ children }) {

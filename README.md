@@ -6,6 +6,8 @@ Shielded ZEC holders can now provide liquidity to THORChain's native ZEC pool **
 
 **Live demo (simulation, no wallet needed):** https://shielded-lp.vercel.app
 
+**shielded-lp is the wallet.** It runs on your own computer: a 24-word seed is created locally and stored encrypted, every slice address is derived from that seed, and the app at `127.0.0.1` drives it. There is no "connect wallet" step, because Zcash wallets do not yet let a website request these transactions. You fund it from the wallet you already use (Zashi, Ywallet, an exchange). Install steps: [Run it](#run-it), or the Install section on the landing page.
+
 ## The problem
 
 - Zcash has no smart contracts, so there is no native AMM on Zcash. Native ZEC liquidity lives on **THORChain**, whose ZEC pool went live on Oct 2, 2026 and is still shallow (≈ 22 ZEC deep when we checked).

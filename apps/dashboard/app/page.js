@@ -60,14 +60,15 @@ function Hero({ pool }) {
           </a>
           <div className="nav-links">
             <a href="#how">How it works</a>
-            <a href="#views">Two views</a>
+            <a href="#wallet">The wallet</a>
+            <a href="#install">Install</a>
             <a href="#pool">Live pool</a>
             <a href={REPO} target="_blank" rel="noreferrer">
               GitHub
             </a>
           </div>
           <Link href="/app" className="pill">
-            Launch app
+            Try the demo
           </Link>
         </nav>
 
@@ -83,16 +84,24 @@ function Hero({ pool }) {
 
         <div className="hero-foot">
           <div>
-            <h2 className="display">Liquidity on THORChain</h2>
-            <p>Provide ZEC liquidity from a shielded wallet. Nobody can tie the position back to you.</p>
+            <h2 className="display">A Zcash wallet for THORChain liquidity</h2>
+            <p>
+              Self-custody, on your own computer. It splits your shielded ZEC into unlinked slices so nobody can tie the position
+              back to you.
+            </p>
             <p className="ticker mono">
               ZEC {pool ? usd(pool.price_usd) : "…"} / pool {pool ? zecFmt(pool.depth_zat / 1e8) : "…"} / {pool?.lp_count ?? "…"} LPs
               <span className={`live-dot ${pool && !pool.halted ? "on" : ""}`} />
             </p>
           </div>
-          <Link href="/app" className="big-link display">
-            Launch app <Arrow />
-          </Link>
+          <div className="hero-ctas">
+            <a href="#install" className="big-link display">
+              Install <Arrow />
+            </a>
+            <Link href="/app" className="small-link">
+              or try the demo in your browser
+            </Link>
+          </div>
         </div>
       </div>
     </header>
@@ -171,6 +180,115 @@ function How() {
           </motion.li>
         ))}
       </ol>
+    </section>
+  );
+}
+
+// ---------- The wallet ----------
+
+const WALLET = [
+  ["Your keys", "A 24-word seed is created on your computer and stored encrypted with a key file only you hold. No account, no sign-up, no server, no custody."],
+  ["Your slices", "Every slice address is derived from that same seed, one index per slice. Back up the seed and one small database file and you can recover every position."],
+  ["Your app", "The app runs at 127.0.0.1 on your machine. It talks to Zcash through a public lightwalletd server and reads THORChain's public API. Nothing else sees your keys."],
+];
+
+function Wallet() {
+  return (
+    <section className="wallet-sec" id="wallet">
+      <p className="eyebrow mono">The wallet</p>
+      <h2 className="display">
+        It is a wallet.
+        <br />
+        It lives on your machine.
+      </h2>
+      <ul className="facts">
+        {WALLET.map(([t, d], i) => (
+          <li key={t}>
+            <span className={`num display c${i}`}>0{i + 1}</span>
+            <h3>{t}</h3>
+            <p>{d}</p>
+          </li>
+        ))}
+      </ul>
+      <p className="aside">
+        <strong>Why no &ldquo;Connect wallet&rdquo; button?</strong> Zcash wallets do not yet let a website ask for these
+        transactions (a deposit with a THORChain memo from a fresh address), so shielded-lp is the wallet. You fund it from the
+        wallet you already use, like Zashi, Ywallet or an exchange.
+      </p>
+    </section>
+  );
+}
+
+// ---------- Install ----------
+
+const INSTALL = [
+  ["Get the code and build it", "Takes a few minutes the first time.", "git clone https://github.com/riorblade/shielded-lp\ncd shielded-lp\ncargo build --release"],
+  [
+    "Create your wallet",
+    "Press Enter at the prompt to generate a new 24-word seed. It is encrypted to main/identity.txt.",
+    "./target/release/slp wallet -w ./main/wallet init \\\n  --name main -i ./main/identity.txt -n main",
+  ],
+  [
+    "Write down your seed",
+    "Copy the 24 words to paper. Also back up main/identity.txt and, once you add liquidity, main/slices.sqlite.",
+    "./target/release/slp wallet -w ./main/wallet display-mnemonic \\\n  -i ./main/identity.txt --enable",
+  ],
+  ["Start the app", "Then open http://127.0.0.1:3000/app in your browser.", "cd apps/dashboard\npnpm install\npnpm dev"],
+  ["Fund it and add liquidity", "Click Receive for a shielded address, send ZEC to it from any wallet, then Add liquidity privately. Start with a small amount.", null],
+];
+
+function Copy({ text }) {
+  const [done, setDone] = useState(false);
+  return (
+    <button
+      type="button"
+      className="copy"
+      onClick={() =>
+        navigator.clipboard?.writeText(text).then(() => {
+          setDone(true);
+          setTimeout(() => setDone(false), 1500);
+        })
+      }
+    >
+      {done ? "Copied" : "Copy"}
+    </button>
+  );
+}
+
+function Install() {
+  return (
+    <section className="install" id="install">
+      <p className="eyebrow mono">Install</p>
+      <h2 className="display">Five steps to your own copy.</h2>
+      <p className="lede">
+        Needs macOS or Linux, <a href="https://rustup.rs">Rust</a>, Node 20+ and <a href="https://pnpm.io">pnpm</a>. Swap{" "}
+        <code>main</code> for <code>test</code> to practise on Zcash testnet first (THORChain is simulated there).
+      </p>
+      <ol>
+        {INSTALL.map(([t, d, cmd], i) => (
+          <li key={t}>
+            <span className={`num display c${i % 4}`}>0{i + 1}</span>
+            <div>
+              <h3>{t}</h3>
+              <p>{d}</p>
+            </div>
+            {cmd && (
+              <div className="cmd">
+                <div className="cmd-bar">
+                  <span className="mono">Terminal</span>
+                  <Copy text={cmd} />
+                </div>
+                <pre>
+                  <code>{cmd}</code>
+                </pre>
+              </div>
+            )}
+          </li>
+        ))}
+      </ol>
+      <p className="warning">
+        This is hackathon software on Zcash mainnet. Use amounts you can afford to lose, and keep your seed offline.
+      </p>
     </section>
   );
 }
@@ -331,9 +449,14 @@ function Cta() {
           No vault, no custody, no server. Every transaction is built and signed from your own seed, on your machine, and checked
           before it is broadcast.
         </p>
-        <Link href="/app" className="big-link display">
-          Launch app <Arrow />
-        </Link>
+        <div className="hero-ctas">
+          <a href="#install" className="big-link display">
+            Install <Arrow />
+          </a>
+          <Link href="/app" className="small-link">
+            or try the demo in your browser
+          </Link>
+        </div>
       </div>
       <footer className="foot mono">
         <span>shielded-lp / Zecathon 2026</span>
@@ -353,6 +476,8 @@ export default function Landing() {
       <Hero pool={pool} />
       <Why pool={pool} />
       <How />
+      <Wallet />
+      <Install />
       <Views />
       <Live pool={pool} history={history} />
       <Privacy />

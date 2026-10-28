@@ -404,7 +404,7 @@ export default function App() {
       {sim && (
         <p className="sim-banner">
           Demo mode: the wallet and every transaction are simulated in your browser, {SPEEDUP}× faster than real time. THORChain
-          pool data is live. <a href="https://github.com/riorblade/shielded-lp#run-it">Run it locally</a> to use a real wallet.
+          pool data is live. <a href="/#install">Install it</a> to use a real wallet.
         </p>
       )}
       {error && <p className="error-banner">Could not read your slices: {error}</p>}
@@ -628,7 +628,7 @@ export default function App() {
             {env && !hasWallet ? (
               <div className="setup">
                 <h3>Set up a {network === "main" ? "mainnet" : "testnet"} wallet</h3>
-                <p>Run this once at the repo root. The seed is encrypted to your identity file and never leaves this machine.</p>
+                <p>This app is the wallet. Run this once at the repo root: the seed is created here, encrypted to your identity file, and never leaves this machine. <a href="/#install">Full install steps</a>.</p>
                 <pre>{`./target/release/slp wallet -w ./${network}/wallet init \\\n  --name main -i ./${network}/identity.txt -n ${network}`}</pre>
                 <p>Then reload this page.</p>
               </div>

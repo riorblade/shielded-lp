@@ -1,13 +1,17 @@
 // Voiceover: one audio file per scene in public/vo/<id>.mp3, durations in src/vo.json.
 // `node scripts/vo.mjs`          -> generate a scratch track with macOS `say`, then measure
 // `node scripts/vo.mjs --measure` -> only measure (after dropping in real voice files)
+// `node scripts/vo.mjs --studio`  -> generate with the global `voiceover` CLI (VoiceStudio clone), then measure
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync, mkdtempSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 const lines = JSON.parse(readFileSync("src/script.json", "utf8"));
-const measureOnly = process.argv.includes("--measure");
+const studio = process.argv.includes("--studio");
+const measureOnly = process.argv.includes("--measure") || studio;
+// This video is fast-paced: 1.15x keeps the cloned voice natural while landing near 3 minutes.
+if (studio) execFileSync("voiceover", ["-f", "src/script.json", "-d", "public/vo", "--speed", process.env.SPEED || "1.15"], { stdio: "inherit" });
 const VOICE = process.env.VOICE || "Samantha";
 const RATE = process.env.RATE || "190";
 // `say` mispronounces a few words; the files for a real voice should use the script text as is.

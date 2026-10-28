@@ -8,7 +8,7 @@ The video is built with [Remotion](https://remotion.dev). Each scene lasts as lo
 2. `node scripts/vo.mjs --measure` (updates `src/vo.json` with the new lengths).
 3. `pnpm render` (writes `out/shielded-lp-demo.mp4`). Preview with `pnpm dev`.
 
-The current files are a scratch track from macOS `say` (`RATE=172 node scripts/vo.mjs`). Pace: fast and confident, about 160 words per minute.
+The current files are the author's cloned voice, generated locally with the global `voiceover` CLI (OmniVoice on the Apple GPU, model from the VoiceStudio app): `node scripts/vo.mjs --studio` (speed 1.15, override with `SPEED=`). A macOS `say` scratch track is still available with `RATE=172 node scripts/vo.mjs`.
 
 | Scene | id | scratch length |
 | --- | --- | --- |

@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/img/landing.png" alt="shielded-lp landing page" width="100%">
+  <a href="https://drive.google.com/file/d/1D1ZaFNj6u51BSxLTIYaBaWX9y933iydq/view?usp=sharing"><img src="docs/img/landing.png" alt="shielded-lp landing page. Click to watch the demo video" width="100%"></a>
 </p>
 
 <h1 align="center">shielded-lp</h1>
@@ -10,6 +10,7 @@
 </p>
 
 <p align="center">
+  <a href="https://drive.google.com/file/d/1D1ZaFNj6u51BSxLTIYaBaWX9y933iydq/view?usp=sharing"><b>Demo video (3 min)</b></a> &nbsp;|&nbsp;
   <a href="https://shielded-lp.vercel.app"><b>Live demo</b></a> &nbsp;|&nbsp;
   <a href="#install"><b>Install</b></a> &nbsp;|&nbsp;
   <a href="NOTES.md"><b>Verified facts and endpoints</b></a>

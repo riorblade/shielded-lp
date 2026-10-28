@@ -347,7 +347,7 @@ function Cta() {
 }
 
 export default function Landing() {
-  const { pool, history } = usePool("day");
+  const { pool, history } = usePool("1m");
   return (
     <div className="landing">
       <Hero pool={pool} />

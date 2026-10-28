@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 
-/** Live THORChain ZEC pool snapshot + history, refreshed in the background. */
-export function usePool(interval = "day") {
+/** Live THORChain ZEC pool snapshot + history for a range ("24h" | "7d" | "1m"). */
+export function usePool(range = "1m") {
   const [pool, setPool] = useState(null);
   const [history, setHistory] = useState(null);
   useEffect(() => {
@@ -17,12 +17,16 @@ export function usePool(interval = "day") {
     return () => clearInterval(t);
   }, []);
   useEffect(() => {
-    fetch(`/api/history?interval=${interval}`)
+    setHistory(null);
+    fetch(`/api/history?range=${range}`)
       .then((r) => r.json())
       .then((h) => setHistory(h.points ?? []))
       .catch(() => setHistory([]));
-  }, [interval]);
-  return { pool, history };
+  }, [range]);
+  // End the series at the live thornode price so the chart and the stats agree.
+  const last = history?.at(-1);
+  const live = pool && last && pool.fetched_at > last.t + 60 ? { t: Math.floor(pool.fetched_at), price: pool.price_usd, depth: pool.depth_zat / 1e8 } : null;
+  return { pool, history: live ? [...history, live] : history };
 }
 
 export const usd = (v) => `$${Number(v).toLocaleString(undefined, { maximumFractionDigits: 2, minimumFractionDigits: 2 })}`;

@@ -127,7 +127,7 @@ Back up `./<network>/slices.sqlite` together with your seed. The slice id is the
 
 `apps/dashboard` serves a landing page at `/` (what the product does, a scroll-driven walkthrough, the public-vs-owner view, live pool charts and the honest privacy table) and the app at `/app`.
 
-The app reads like a DEX position page: the ZEC/RUNE pool with an **In range · Full range** badge, a price/liquidity chart from Midgard history, your aggregate position, and a swap-style panel to **Add** (amount, slice size, time between slices, a live summary of slices, fees and estimated slip) or **Remove** (withdraw every slice and shield back). A **Public view** tab shows only what Midgard shows. Locally it drives the `slp` binary; nothing but `slp` touches your keys.
+The app reads like a DEX position page: the ZEC/RUNE pool with an **In range · Full range** badge, a price/liquidity chart (24H / 7D / 1M from Midgard, sampled from thornode archive state if Midgard is down) marking your average entry price and when your slices joined, live pool stats with 24h change, your aggregate position, a per-slice progress view (fund, join, earning, withdraw, shield back), and a swap-style panel to **Add** (amount, slice size, time between slices, a live summary of slices, fees and estimated slip) or **Remove** (withdraw every slice and shield back). A **Public view** tab shows only what Midgard shows. Locally it drives the `slp` binary; nothing but `slp` touches your keys.
 
 On range: THORChain pools are constant-product (x·y=k) across every price, so a THORChain position is always in range. The chart shows that range explicitly instead of a Uniswap v3-style min/max.
 

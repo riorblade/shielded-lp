@@ -1,5 +1,6 @@
 .app {
   min-height: 100vh;
+  overflow-x: clip;
   background: var(--ink);
 }
 
@@ -284,23 +285,38 @@
 }
 
 .chart-tools {
-  position: absolute;
-  top: 0;
-  right: 0;
-  z-index: 2;
   display: flex;
+  justify-content: space-between;
   gap: 8px;
-}
-
-.chart-card .chart figcaption {
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-  min-height: 64px;
+  margin-bottom: 18px;
 }
 
 .chart-card .chart-value {
-  font-size: 2.5rem;
+  font-size: 3rem;
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin: 12px 0 0;
+  font-size: 0.8125rem;
+  color: var(--dim);
+}
+
+.legend b {
+  font-size: 0.8125rem;
+}
+
+.lg-entry {
+  width: 22px;
+  border-top: 2px dashed var(--thor);
+}
+
+.lg-join {
+  margin-left: 14px;
+  color: var(--thor);
 }
 
 /* ---------- slices ---------- */
@@ -395,14 +411,14 @@
   margin: 0;
 }
 
-.slice-list li {
+.slice-list > li {
   padding: 18px 0;
   border-bottom: 1px solid var(--line);
 }
 
 .s-top {
   display: grid;
-  grid-template-columns: 64px 110px 1fr auto;
+  grid-template-columns: 64px 100px 1fr auto;
   gap: 12px;
   align-items: baseline;
 }
@@ -422,39 +438,30 @@
   font-weight: 800;
 }
 
-.st-lp_active {
+.st-lp_active .s-state {
   color: var(--good);
 }
 
-.st-closed {
+.st-closed .s-state,
+.st-closed .s-id {
   color: var(--dim);
+}
+
+.st-failed .s-state {
+  color: var(--bad);
+}
+
+.s-redeem {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: var(--dim);
+  font-variant-numeric: tabular-nums;
 }
 
 .s-next {
   color: var(--dim);
   font-family: var(--mono), monospace;
   font-size: 0.75rem;
-}
-
-.s-steps {
-  display: grid;
-  grid-template-columns: repeat(9, 1fr);
-  gap: 4px;
-  margin: 12px 0 10px;
-}
-
-.s-steps span {
-  height: 6px;
-  border-radius: 3px;
-  background: var(--ink-3);
-}
-
-.s-steps .done {
-  background: rgba(244, 183, 40, 0.45);
-}
-
-.s-steps .now {
-  background: var(--zec);
 }
 
 .s-meta {
@@ -684,7 +691,10 @@
 
 .chips button {
   flex: 1;
-  padding: 10px 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 9px 0;
   border-radius: 14px;
   background: var(--ink);
   color: var(--paper);
@@ -696,10 +706,8 @@
   color: var(--ink);
 }
 
-.chips.wide button {
-  display: flex;
-  flex-direction: column;
-  padding: 9px 0;
+.chips button.none:not(.on) {
+  opacity: 0.4;
 }
 
 .chips small {
@@ -834,6 +842,247 @@
 }
 
 /* ---------- responsive ---------- */
+/* ---------- pool strip ---------- */
+.strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px 36px;
+  margin: -12px 0 0;
+  padding: 16px 0;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+
+.strip dt {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--dim);
+}
+
+.strip dd {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 3px 0 0;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.strip dd b {
+  font-size: 0.75rem;
+}
+
+.strip .ok {
+  color: var(--good);
+}
+
+.strip .bad {
+  color: var(--bad);
+}
+
+.sdot {
+  align-self: center;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+/* ---------- hints ---------- */
+.hint {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  border-radius: 50%;
+  background: var(--ink-3);
+  color: var(--dim);
+  font-family: var(--sans), sans-serif;
+  font-size: 0.6875rem;
+  font-weight: 800;
+  letter-spacing: 0;
+  text-transform: none;
+  vertical-align: 1px;
+  cursor: help;
+}
+
+.tip {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  z-index: 30;
+  width: min(240px, 70vw);
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: var(--paper);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 600;
+  line-height: 1.4;
+  text-align: left;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+  transform: translateX(-50%);
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.15s;
+}
+
+.hint:hover .tip,
+.hint:focus .tip {
+  opacity: 1;
+  visibility: visible;
+}
+
+.side .tip {
+  left: auto;
+  right: -8px;
+  transform: none;
+}
+
+/* ---------- position ---------- */
+.position .sec-head {
+  border-bottom: 0;
+}
+
+.counts {
+  font-size: 0.75rem;
+  color: var(--dim);
+  letter-spacing: 0.04em;
+}
+
+.position .stats em b {
+  font-size: 0.75rem;
+}
+
+/* ---------- slice phases ---------- */
+.phases {
+  list-style: none;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+  margin: 14px 0 10px;
+  padding: 0;
+}
+
+.phases li {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: rgba(246, 244, 251, 0.3);
+}
+
+.phases li span {
+  display: block;
+  height: 6px;
+  margin-bottom: 6px;
+  border-radius: 3px;
+  background: var(--ink-3);
+}
+
+.phases .done {
+  color: var(--dim);
+}
+
+.phases .done span {
+  background: rgba(244, 183, 40, 0.5);
+}
+
+.phases .now {
+  color: var(--zec);
+}
+
+.phases .now span {
+  background: var(--zec);
+  animation: blink 1.6s ease-in-out infinite;
+}
+
+.st-lp_active .phases .now {
+  color: var(--good);
+}
+
+.st-lp_active .phases .now span {
+  background: var(--good);
+  animation: none;
+}
+
+.st-closed .phases span {
+  background: rgba(46, 216, 182, 0.4);
+}
+
+/* ---------- add panel extras ---------- */
+.quick {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.quick button {
+  flex: 1;
+  padding: 7px 0;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ink-3);
+  color: var(--paper);
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.quick button:hover {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.timeline {
+  margin: 20px 0 0;
+  padding: 14px 16px 18px;
+  border-radius: 16px;
+  background: var(--ink);
+}
+
+.tl-head {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--dim);
+}
+
+.tl-line {
+  position: relative;
+  height: 2px;
+  margin: 16px 6px 0;
+  background: var(--ink-3);
+}
+
+.tl-line span {
+  position: absolute;
+  top: -5px;
+  width: 12px;
+  height: 12px;
+  margin-left: -6px;
+  border-radius: 50%;
+  background: var(--zec);
+  box-shadow: 0 0 0 3px var(--ink);
+}
+
+.summary .total {
+  padding-top: 10px;
+  border-top: 1px solid var(--line);
+  color: var(--paper);
+  font-weight: 800;
+}
+
+.summary dd.total {
+  font-family: var(--display), Impact, sans-serif;
+  font-weight: 400;
+  font-size: 1.5rem;
+  color: var(--zec);
+}
+
 @media (max-width: 1020px) {
   .grid {
     grid-template-columns: minmax(0, 1fr);
@@ -871,9 +1120,11 @@
   .s-next {
     grid-column: 1 / -1;
   }
-  .chart-tools {
-    position: static;
-    margin-bottom: 8px;
+  .phases li {
+    font-size: 0.625rem;
+  }
+  .chart-card .chart-value {
+    font-size: 2.25rem;
   }
   .frags li {
     grid-template-columns: minmax(0, 1fr);

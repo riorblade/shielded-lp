@@ -7,41 +7,52 @@ import { SPEEDUP, emptySim, preview, simExit, simPlan, simState, simTick } from 
 import { usd, usePool, zecFmt } from "../../lib/usePool";
 import "./app.css";
 
-const STEPS = [
-  ["PLANNED", "Scheduled"],
-  ["FUNDING_SENT", "Funding from shielded"],
-  ["FUNDED", "Funded"],
-  ["ADD_SENT", "Adding liquidity"],
-  ["LP_ACTIVE", "Earning"],
-  ["WD_SENT", "Withdrawing"],
-  ["WD_RECEIVED", "Proceeds received"],
-  ["SHIELD_SENT", "Shielding back"],
-  ["CLOSED", "Shielded again"],
-];
-const LABEL = Object.fromEntries([...STEPS, ["FAILED", "Failed"]]);
-const stepIndex = (s) => STEPS.findIndex(([k]) => k === s);
+const LABEL = {
+  PLANNED: "Scheduled",
+  FUNDING_SENT: "Funding from shielded",
+  FUNDED: "Funded",
+  ADD_SENT: "Joining the pool",
+  LP_ACTIVE: "Earning",
+  WD_SENT: "Withdrawing",
+  WD_RECEIVED: "Proceeds received",
+  SHIELD_SENT: "Shielding back",
+  CLOSED: "Back in your shielded balance",
+  FAILED: "Failed",
+};
+// Five phases a user can follow; the nine internal states map onto them.
+const PHASES = ["Fund", "Join pool", "Earning", "Withdraw", "Shield back"];
+const PHASE_OF = { PLANNED: -1, FUNDING_SENT: 0, FUNDED: 0, ADD_SENT: 1, LP_ACTIVE: 2, WD_SENT: 3, WD_RECEIVED: 3, SHIELD_SENT: 4, CLOSED: 5, FAILED: -1 };
 const SIZES = ["0.1", "0.5", "1", "5", "10"];
 const SPACING = [
-  ["1m-5m", "Minutes", "Demo speed"],
-  ["30m-3h", "Hours", "Good"],
-  ["6h-48h", "Days", "Most private"],
+  ["1m-5m", "Minutes", "1–5 min apart", "Low, demo only"],
+  ["30m-3h", "Hours", "30 min–3 h apart", "Good"],
+  ["6h-48h", "Days", "6–48 h apart", "Best"],
+];
+const RANGES = [
+  ["24h", "24H"],
+  ["7d", "7D"],
+  ["1m", "1M"],
 ];
 const EXPLORER = {
   main: "https://mainnet.zcashexplorer.app/transactions/",
   test: "https://testnet.zcashexplorer.app/transactions/",
 };
+// Per-slice exit cost besides THORChain's outbound fee: withdraw tx fee + its payload + shield tx fee.
+const EXIT_TX_COST = 15_000 + 16_000 + 15_000;
 
 const fmt = (zat, digits) => {
   const n = Number(zat || 0) / 1e8;
   return n.toFixed(digits ?? (n !== 0 && Math.abs(n) < 0.01 ? 6 : 4));
 };
+const dur = (s) =>
+  s < 90 ? `${Math.round(s)} s` : s < 5400 ? `${Math.round(s / 60)} min` : s < 172800 ? `${(s / 3600).toFixed(1)} h` : `${(s / 86400).toFixed(1)} days`;
 const until = (secs) => {
-  const d = Math.round(secs - Date.now() / 1000);
-  if (d <= 0) return null;
-  return d < 120 ? `in ${d}s` : d < 7200 ? `in ${Math.round(d / 60)} min` : `in ${Math.round(d / 3600)} h`;
+  const d = secs - Date.now() / 1000;
+  return d > 0 ? `in ${dur(d)}` : null;
 };
 const date = (secs) =>
   secs ? new Date(Number(secs) * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" }) : "—";
+const pct = (a, b) => (a && b ? ((a - b) / b) * 100 : null);
 
 async function post(path, network, body) {
   const r = await fetch(`/api/${path}?network=${network}`, {
@@ -80,13 +91,125 @@ function Token({ sym }) {
   );
 }
 
+/** A "?" that explains a term on hover or keyboard focus. */
+function Hint({ children }) {
+  return (
+    <span className="hint" tabIndex={0} aria-label={children}>
+      ?<span className="tip" aria-hidden="true">
+        {children}
+      </span>
+    </span>
+  );
+}
+
+function Change({ value, suffix }) {
+  if (value == null || !Number.isFinite(value)) return null;
+  const flat = Math.abs(value) < 0.005;
+  return (
+    <b className={flat ? "flat" : value > 0 ? "up" : "down"}>
+      {flat ? "" : value > 0 ? "▲ " : "▼ "}
+      {Math.abs(value).toFixed(2)}%{suffix}
+    </b>
+  );
+}
+
+function Seg({ value, options, onChange, label }) {
+  return (
+    <div className="seg" role="radiogroup" aria-label={label}>
+      {options.map(([v, l]) => (
+        <button key={v} role="radio" aria-checked={value === v} className={value === v ? "on" : ""} onClick={() => onChange(v)}>
+          {l}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function PoolStrip({ pool }) {
+  return (
+    <dl className="strip">
+      <div>
+        <dt>ZEC price</dt>
+        <dd>
+          {pool ? usd(pool.price_usd) : "…"} <Change value={pct(pool?.price_usd, pool?.price_24h_usd)} suffix=" 24h" />
+        </dd>
+      </div>
+      <div>
+        <dt>Pool depth</dt>
+        <dd>
+          {pool ? zecFmt(pool.depth_zat / 1e8) : "…"} <Change value={pct(pool?.depth_zat, pool?.depth_24h_zat)} suffix=" 24h" />
+        </dd>
+      </div>
+      <div>
+        <dt>Providers</dt>
+        <dd>{pool?.lp_count ?? "…"}</dd>
+      </div>
+      <div>
+        <dt>
+          Exit fee <Hint>THORChain&apos;s fee for sending ZEC back when a slice withdraws. Charged once per slice.</Hint>
+        </dt>
+        <dd>{pool ? `${fmt(pool.outbound_fee, 5)} ZEC` : "…"}</dd>
+      </div>
+      <div>
+        <dt>Status</dt>
+        <dd className={pool && !pool.halted ? "ok" : "bad"}>
+          <span className="sdot" />
+          {pool ? (pool.halted ? "Paused" : pool.status) : "…"}
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
+function SliceRow({ slice, lp, unit, network, sim }) {
+  const phase = PHASE_OF[slice.state];
+  const next = ["CLOSED", "FAILED"].includes(slice.state) ? null : until(slice.scheduled_at);
+  let status = LABEL[slice.state];
+  if (slice.state === "PLANNED") status = next ? `Starts ${next}` : "Starting";
+  else if (slice.state === "LP_ACTIVE") status = slice.exit_requested ? `Exit queued${next ? `, ${next}` : ""}` : "Earning";
+  else if (next) status += `, next step ${next}`;
+  return (
+    <li className={`slice st-${slice.state.toLowerCase()}`}>
+      <div className="s-top">
+        <span className="s-id display">#{slice.id}</span>
+        <span className="s-amt">
+          {fmt(slice.denom, 2)} {unit}
+        </span>
+        <span className="s-state">{status}</span>
+        {lp?.asset_redeem_value && (
+          <span className="s-redeem">
+            worth {fmt(lp.asset_redeem_value)} {unit}
+          </span>
+        )}
+      </div>
+      <ol className="phases" aria-label={`Phase: ${PHASES[phase] ?? status}`}>
+        {PHASES.map((p, i) => (
+          <li key={p} className={i < phase ? "done" : i === phase ? "now" : ""}>
+            <span />
+            {p}
+          </li>
+        ))}
+      </ol>
+      <div className="s-meta">
+        <code title="This slice's own public address">{slice.address}</code>
+        <span className="s-txs">
+          {["fund", "add", "wd", "out", "shield"].map((k) => (
+            <Tx key={k} network={network} simulated={sim} id={slice[`${k}_txid`]} label={{ wd: "withdraw", out: "outbound" }[k] ?? k} />
+          ))}
+        </span>
+      </div>
+      {(slice.error || slice.note) && <p className="note">{slice.error || slice.note}</p>}
+    </li>
+  );
+}
+
 export default function App() {
   const [env, setEnv] = useState(null);
   const [network, setNetwork] = useState("main");
   const [view, setView] = useState("position");
   const [side, setSide] = useState("add");
-  const [chart, setChart] = useState("price");
-  const [interval, setInterval_] = useState("day");
+  const [metric, setMetric] = useState("price");
+  const [range, setRange] = useState("7d");
   const [remote, setRemote] = useState(null);
   const [sims, setSims] = useState(null);
   const [error, setError] = useState(null);
@@ -94,7 +217,7 @@ export default function App() {
   const [confirm, setConfirm] = useState(null);
   const [address, setAddress] = useState(null);
   const [form, setForm] = useState({ amount: "0.3", denoms: "0.1", jitter: "1m-5m", reserve: "0.001" });
-  const { pool, history } = usePool(interval);
+  const { pool, history } = usePool(range);
 
   const sim = env && !env.local;
   const unit = network === "test" ? "TAZ" : "ZEC";
@@ -152,11 +275,28 @@ export default function App() {
   const agg = data?.status?.aggregate;
   const observed = data?.observer ?? [];
   const lpActive = rows.filter(({ slice }) => slice.state === "LP_ACTIVE" && !slice.exit_requested).length;
-  const pending = rows.filter(({ slice }) => !["CLOSED", "FAILED", "LP_ACTIVE"].includes(slice.state)).length;
+  const moving = rows.filter(({ slice }) => !["CLOSED", "FAILED", "LP_ACTIVE"].includes(slice.state)).length;
+  const closed = rows.filter(({ slice }) => slice.state === "CLOSED").length;
   const shielded = data?.balance?.ironwood_spendable ?? 0;
   const depth = network === "main" ? pool?.depth_zat : null;
   const share = depth && agg?.deposited_zat ? (100 * agg.deposited_zat) / (depth + agg.deposited_zat) : 0;
   const inLp = (agg?.slices_in_lp ?? 0) > 0;
+  const price = pool?.price_usd ?? 0;
+  const deposited = agg?.deposited_zat ?? 0;
+  const redeemable = agg?.redeemable_zat ?? 0;
+
+  // Your slices on the price chart: average entry price and when each one joined.
+  const joined = rows.filter(({ lp, slice }) => lp && slice.lp_since).map(({ slice }) => slice);
+  const joinedKey = joined.map((s) => `${s.id}:${s.lp_since}`).join();
+  const entry = useMemo(() => {
+    if (network !== "main" || !joined.length || !history?.length || !price) return null;
+    const last = history.at(-1).t;
+    const at = (t) => (t > last ? price : history.reduce((b, p) => (Math.abs(p.t - t) < Math.abs(b.t - t) ? p : b)).price);
+    const w = joined.reduce((s, x) => s + x.denom, 0);
+    return { value: joined.reduce((s, x) => s + at(x.lp_since) * x.denom, 0) / w, label: "Your entry" };
+  }, [network, joinedKey, history, price]); // eslint-disable-line react-hooks/exhaustive-deps
+  const markers =
+    network === "main" && history?.length ? joined.filter((s) => s.lp_since >= history[0].t).map((s) => ({ t: s.lp_since })) : [];
 
   const plan = useMemo(() => {
     try {
@@ -165,6 +305,9 @@ export default function App() {
       return { error: e.message };
     }
   }, [form, depth]);
+  const amountZat = Math.round(Number(form.amount || 0) * 1e8) || 0;
+  const span = plan.ok ? Math.max(1, plan.ok.slices.at(-1).scheduled_at - Date.now() / 1000) : 1;
+  const exitFees = lpActive * ((pool?.outbound_fee ?? 0) + EXIT_TX_COST);
 
   async function act(fn, ok) {
     setNotice(null);
@@ -186,7 +329,7 @@ export default function App() {
         await post("plan", network, form);
         await post("run", network, { action: "start" });
       }
-    }, "Plan saved and started. Each slice moves at its own random time.");
+    }, "Started. Each slice moves at its own random time; follow them under Your slices.");
 
   const resume = () =>
     act(async () => {
@@ -214,9 +357,12 @@ export default function App() {
 
   const sync = () => act(() => post("sync", network), "Sync started.");
   const resetSim = () => setSims((s) => ({ ...s, [network]: emptySim(network) }));
-
-  const priceFmt = usd;
-  const depthFmt = zecFmt;
+  // Keep ~0.02 ZEC aside for per-slice fees when using the quick buttons.
+  const spendable = Math.max(0, shielded - 2_000_000);
+  const setAmount = (zat) => {
+    setConfirm(null);
+    setForm({ ...form, amount: String(Math.floor(zat / 1e4) / 1e4) });
+  };
 
   return (
     <div className="app">
@@ -237,16 +383,15 @@ export default function App() {
           </button>
         </nav>
         <div className="bar-right">
-          <div className="seg" role="radiogroup" aria-label="Network">
-            {[
+          <Seg
+            label="Network"
+            value={network}
+            onChange={setNetwork}
+            options={[
               ["main", "Mainnet"],
               ["test", "Testnet"],
-            ].map(([n, l]) => (
-              <button key={n} role="radio" aria-checked={network === n} className={network === n ? "on" : ""} onClick={() => setNetwork(n)}>
-                {l}
-              </button>
-            ))}
-          </div>
+            ]}
+          />
           {hasWallet && (
             <span className="wallet-chip" title="Shielded, spendable">
               <span className="dot-shield" />
@@ -274,80 +419,103 @@ export default function App() {
               </span>
               <div>
                 <h1 className="display">ZEC / RUNE</h1>
-                <p>THORChain native pool · single-sided ZEC</p>
+                <p>THORChain native pool. You add ZEC only (single-sided).</p>
               </div>
             </div>
             <div className="badges">
-              <span className={`badge ${inLp ? "good" : ""}`} title="THORChain pools use x·y=k across every price, so liquidity is always active.">
+              <span className={`badge ${inLp ? "good" : ""}`}>
                 <span className="b-dot" />
                 {inLp ? "In range" : "No position"}
+                <Hint>THORChain pools use x·y=k at every price, so a position here is always in range and always earning fees.</Hint>
               </span>
-              <span className="badge">Full range</span>
+              <span className="badge">
+                Full range <Hint>There is no min/max price to set, unlike Uniswap v3. Your range is 0 → ∞.</Hint>
+              </span>
               <span className="badge">{network === "main" ? "Live THORChain" : "Simulated THORChain"}</span>
             </div>
           </section>
 
+          <PoolStrip pool={pool} />
+
           {view === "position" ? (
             <>
-              <section className="stats">
-                <div>
-                  <span>Your liquidity</span>
-                  <strong className="display">
-                    {fmt(agg?.deposited_zat, 4)} {unit}
-                  </strong>
-                  {pool && network === "main" && <em>{usd(((agg?.deposited_zat ?? 0) / 1e8) * pool.price_usd)}</em>}
-                </div>
-                <div>
-                  <span>Redeemable now</span>
-                  <strong className="display">
-                    {fmt(agg?.redeemable_zat, 4)} {unit}
-                  </strong>
-                  <em>after slip, before exit fees</em>
-                </div>
-                <div>
-                  <span>Unlinked slices</span>
-                  <strong className="display">{agg?.slices_in_lp ?? 0}</strong>
-                  <em>each its own address</em>
-                </div>
-                <div>
-                  <span>Pool share</span>
-                  <strong className="display">{share ? `${share.toFixed(2)}%` : "—"}</strong>
-                  <em>{pool ? `of ${fmt(pool.depth_zat, 2)} ZEC` : ""}</em>
-                </div>
-              </section>
-
               <section className="chart-card">
                 <div className="chart-tools">
-                  <div className="seg small" role="tablist" aria-label="Chart">
-                    <button className={chart === "price" ? "on" : ""} onClick={() => setChart("price")}>
-                      Price
-                    </button>
-                    <button className={chart === "depth" ? "on" : ""} onClick={() => setChart("depth")}>
-                      Liquidity
-                    </button>
+                  <Seg
+                    label="Chart"
+                    value={metric}
+                    onChange={setMetric}
+                    options={[
+                      ["price", "Price"],
+                      ["depth", "Liquidity"],
+                    ]}
+                  />
+                  <Seg label="Period" value={range} onChange={setRange} options={RANGES} />
+                </div>
+                <AreaChart
+                  key={metric}
+                  points={history}
+                  field={metric}
+                  format={metric === "price" ? usd : zecFmt}
+                  height={320}
+                  hours={range !== "1m"}
+                  period={`past ${RANGES.find(([v]) => v === range)[1]}`}
+                  label={metric === "price" ? "ZEC price in the pool" : "ZEC liquidity in the pool"}
+                  band={metric === "price" ? (inLp ? "Your range: 0 → ∞, always in range" : "Full range: 0 → ∞") : null}
+                  entry={metric === "price" ? entry : null}
+                  markers={metric === "price" ? markers : null}
+                />
+                {metric === "price" && entry && (
+                  <p className="legend">
+                    <span className="lg-entry" /> Your average entry {usd(entry.value)} <Change value={pct(price, entry.value)} suffix=" since" />
+                    <span className="lg-join">▲</span> When your slices joined
+                  </p>
+                )}
+              </section>
+
+              <section className="position">
+                <div className="sec-head">
+                  <h2 className="display">Your position</h2>
+                  {rows.length > 0 && (
+                    <span className="counts mono">
+                      {agg?.slices_in_lp ?? 0} earning / {moving} moving / {closed} closed
+                    </span>
+                  )}
+                </div>
+                <div className="stats">
+                  <div>
+                    <span>
+                      Deposited <Hint>ZEC you added, summed over every slice still in the pool. Only you can add these up.</Hint>
+                    </span>
+                    <strong className="display">
+                      {fmt(deposited, 4)} {unit}
+                    </strong>
+                    <em>{network === "main" && price ? usd((deposited / 1e8) * price) : " "}</em>
                   </div>
-                  <div className="seg small" role="tablist" aria-label="Period">
-                    <button className={interval === "hour" ? "on" : ""} onClick={() => setInterval_("hour")}>
-                      7D
-                    </button>
-                    <button className={interval === "day" ? "on" : ""} onClick={() => setInterval_("day")}>
-                      All
-                    </button>
+                  <div>
+                    <span>
+                      Value now <Hint>What you would get back if you withdrew now, before exit fees. Single-sided adds lose a little to slip.</Hint>
+                    </span>
+                    <strong className="display">
+                      {fmt(redeemable, 4)} {unit}
+                    </strong>
+                    <em>{deposited ? <Change value={pct(redeemable, deposited)} suffix=" vs deposited" /> : " "}</em>
+                  </div>
+                  <div>
+                    <span>
+                      Slices in pool <Hint>Each slice is a separate position at its own address. Nothing on-chain links them.</Hint>
+                    </span>
+                    <strong className="display">{agg?.slices_in_lp ?? 0}</strong>
+                    <em>{rows.length ? `of ${rows.length} planned` : " "}</em>
+                  </div>
+                  <div>
+                    <span>
+                      Pool share <Hint>Your part of all ZEC in the pool, which is also your part of the fees it earns.</Hint>
+                    </span>
+                    <strong className="display">{share ? `${share.toFixed(2)}%` : "0%"}</strong>
+                    <em>{pool ? `of ${fmt(pool.depth_zat, 2)} ZEC` : " "}</em>
                   </div>
                 </div>
-                {chart === "price" ? (
-                  <AreaChart
-                    key={`p${interval}`}
-                    points={history}
-                    field="price"
-                    format={priceFmt}
-                    height={280}
-                    label="ZEC price in the THORChain pool"
-                    band="Your range: 0 → ∞ (full range, always in range)"
-                  />
-                ) : (
-                  <AreaChart key={`d${interval}`} points={history} field="depth" format={depthFmt} height={280} label="ZEC liquidity in the pool" />
-                )}
               </section>
 
               <section className="slices">
@@ -360,7 +528,7 @@ export default function App() {
                           Pause
                         </button>
                       ) : (
-                        pending > 0 && (
+                        moving > 0 && (
                           <button className="btn ghost sm" onClick={resume}>
                             Resume
                           </button>
@@ -373,62 +541,18 @@ export default function App() {
                     )}
                   </div>
                 </div>
-                {data?.running && <p className="running">Working: each slice moves at its own scheduled time.</p>}
+                {data?.running && <p className="running">Working: each slice moves on its own schedule.</p>}
                 {rows.length === 0 ? (
-                  <div className="empty">
-                    <p>No liquidity yet. Use the panel on the right: choose an amount, a slice size and how far apart they start.</p>
-                    <ol className="howto">
-                      <li>Your shielded {unit} is split into equal slices.</li>
-                      <li>Each slice gets a fresh address and joins the pool at its own time.</li>
-                      <li>Withdraw any time: each slice exits and is shielded again.</li>
-                    </ol>
-                  </div>
+                  <ol className="howto">
+                    <li>Pick an amount on the right. It is split into equal slices.</li>
+                    <li>Each slice gets a fresh address and joins the pool at its own random time.</li>
+                    <li>Remove any time: every slice exits on its own and is shielded again.</li>
+                  </ol>
                 ) : (
                   <ul className="slice-list">
-                    {rows.map(({ slice, lp }) => {
-                      const at = stepIndex(slice.state);
-                      const next = ["CLOSED", "FAILED"].includes(slice.state) ? null : until(slice.scheduled_at);
-                      return (
-                        <li key={slice.id} className={slice.state === "FAILED" ? "failed" : ""}>
-                          <div className="s-top">
-                            <span className="s-id display">#{slice.id}</span>
-                            <span className="s-amt">
-                              {fmt(slice.denom, 2)} {unit}
-                            </span>
-                            <span className={`s-state st-${slice.state.toLowerCase()}`}>
-                              {LABEL[slice.state]}
-                              {slice.exit_requested && slice.state === "LP_ACTIVE" ? ", exit queued" : ""}
-                            </span>
-                            <span className="s-next">{next ? `next ${next}` : ""}</span>
-                          </div>
-                          <div className="s-steps" role="img" aria-label={`Step ${at + 1} of ${STEPS.length}`}>
-                            {STEPS.map(([k], i) => (
-                              <span key={k} className={i < at ? "done" : i === at ? "now" : ""} />
-                            ))}
-                          </div>
-                          <div className="s-meta">
-                            <code>{slice.address}</code>
-                            {lp?.asset_redeem_value && (
-                              <span>
-                                redeem {fmt(lp.asset_redeem_value)} {unit}
-                              </span>
-                            )}
-                            <span className="s-txs">
-                              {["fund", "add", "wd", "out", "shield"].map((k) => (
-                                <Tx
-                                  key={k}
-                                  network={network}
-                                  simulated={sim}
-                                  id={slice[`${k}_txid`]}
-                                  label={{ wd: "withdraw", out: "outbound" }[k] ?? k}
-                                />
-                              ))}
-                            </span>
-                          </div>
-                          {(slice.error || slice.note) && <p className="note">{slice.error || slice.note}</p>}
-                        </li>
-                      );
-                    })}
+                    {rows.map(({ slice, lp }) => (
+                      <SliceRow key={slice.id} slice={slice} lp={lp} unit={unit} network={network} sim={sim} />
+                    ))}
                   </ul>
                 )}
                 {data?.log?.length > 0 && (
@@ -441,10 +565,10 @@ export default function App() {
             </>
           ) : (
             <section className="public">
-              <h2 className="display">What anyone can see on Midgard</h2>
+              <h2 className="display">What anyone can see</h2>
               <p className="muted">
-                These are your slice addresses as the public sees them: small, separate providers, sorted by address. Nothing
-                here connects them to each other, to your total, or to your shielded wallet.
+                Your slice addresses as Midgard shows them: separate small providers, sorted by address. Nothing here connects them
+                to each other, to your total, or to your shielded wallet.
               </p>
               {observed.length === 0 ? (
                 <p className="empty">Nothing public yet. Addresses appear once a deposit is sent.</p>
@@ -516,7 +640,7 @@ export default function App() {
                 }}
               >
                 <label className="amount">
-                  <span className="lbl">You provide</span>
+                  <span className="lbl">You add</span>
                   <span className="amount-row">
                     <input
                       inputMode="decimal"
@@ -532,29 +656,45 @@ export default function App() {
                     </span>
                   </span>
                   <span className="amount-foot">
-                    <span>{pool && network === "main" && !plan.error ? usd(Number(form.amount || 0) * pool.price_usd) : ""}</span>
-                    <span>
-                      Shielded: {fmt(shielded)}{" "}
-                      <button type="button" className="link" onClick={() => setForm({ ...form, amount: String(Math.max(0, (shielded - 2_000_000) / 1e8).toFixed(4)) })}>
-                        Max
-                      </button>
-                    </span>
+                    <span>{network === "main" && price && !plan.error ? usd(Number(form.amount || 0) * price) : " "}</span>
+                    <span>Shielded: {fmt(shielded)}</span>
                   </span>
                 </label>
+                <div className="quick">
+                  {[
+                    [0.25, "25%"],
+                    [0.5, "50%"],
+                    [1, "Max"],
+                  ].map(([f, l]) => (
+                    <button type="button" key={l} onClick={() => setAmount(spendable * f)}>
+                      {l}
+                    </button>
+                  ))}
+                </div>
 
                 <fieldset className="opt">
-                  <legend>Slice size</legend>
+                  <legend>
+                    Slice size <Hint>Every slice has this exact size. Common sizes blend in with other providers.</Hint>
+                  </legend>
                   <div className="chips">
-                    {SIZES.map((s) => (
-                      <button type="button" key={s} className={form.denoms === s ? "on" : ""} onClick={() => setForm({ ...form, denoms: s })}>
-                        {s}
-                      </button>
-                    ))}
+                    {SIZES.map((s) => {
+                      const n = Math.floor(amountZat / Math.round(Number(s) * 1e8));
+                      return (
+                        <button type="button" key={s} className={`${form.denoms === s ? "on" : ""} ${n ? "" : "none"}`} onClick={() => setForm({ ...form, denoms: s })}>
+                          <strong>{s}</strong>
+                          <small>
+                            {n} slice{n === 1 ? "" : "s"}
+                          </small>
+                        </button>
+                      );
+                    })}
                   </div>
                 </fieldset>
 
                 <fieldset className="opt">
-                  <legend>Time between slices</legend>
+                  <legend>
+                    Time between slices <Hint>Longer gaps make the slices harder to link by timing. Use days for real funds.</Hint>
+                  </legend>
                   <div className="chips wide">
                     {SPACING.map(([v, l, d]) => (
                       <button type="button" key={v} className={form.jitter === v ? "on" : ""} onClick={() => setForm({ ...form, jitter: v })}>
@@ -568,46 +708,66 @@ export default function App() {
                 {plan.error ? (
                   <p className="note">{plan.error}</p>
                 ) : (
-                  <dl className="summary">
-                    <dt>Slices</dt>
-                    <dd>
-                      {plan.ok.slices.length} × {fmt(plan.ok.slices[0].denom, 2)} {unit}
-                    </dd>
-                    <dt>Needed, incl. fees</dt>
-                    <dd>
-                      {fmt(plan.ok.total_needed)} {unit}
-                    </dd>
-                    {plan.ok.leftover > 0 && (
-                      <>
-                        <dt>Stays shielded</dt>
-                        <dd>
-                          {fmt(plan.ok.leftover)} {unit}
-                        </dd>
-                      </>
-                    )}
-                    <dt>Price range</dt>
-                    <dd>Full range</dd>
-                    {plan.ok.largest_pct_of_depth != null && (
-                      <>
-                        <dt>Est. slip per slice</dt>
-                        <dd className={plan.ok.largest_pct_of_depth > 2 ? "warn" : ""}>
-                          ~{((100 * plan.ok.slices[0].denom) / (plan.ok.slices[0].denom + depth)).toFixed(2)}%
-                        </dd>
-                      </>
-                    )}
-                  </dl>
+                  <>
+                    <div className="timeline" role="img" aria-label={`${plan.ok.slices.length} slices join over about ${dur(span)}`}>
+                      <div className="tl-head">
+                        <span>Now</span>
+                        <span>
+                          {plan.ok.slices.length} slices over ≈ {dur(span)}
+                          {sim ? `, ${SPEEDUP}× faster here` : ""}
+                        </span>
+                      </div>
+                      <div className="tl-line">
+                        {plan.ok.slices.map((s, i) => (
+                          <span key={i} style={{ left: `${Math.min(100, (100 * (s.scheduled_at - Date.now() / 1000)) / span)}%` }} />
+                        ))}
+                      </div>
+                    </div>
+                    <dl className="summary">
+                      <dt>Slices</dt>
+                      <dd>
+                        {plan.ok.slices.length} × {fmt(plan.ok.slices[0].denom, 2)} {unit}
+                      </dd>
+                      <dt>
+                        Total incl. fees <Hint>Slices plus a small reserve per slice for its Zcash network fees.</Hint>
+                      </dt>
+                      <dd>
+                        {fmt(plan.ok.total_needed)} {unit}
+                      </dd>
+                      {plan.ok.leftover > 0 && (
+                        <>
+                          <dt>Stays shielded</dt>
+                          <dd>
+                            {fmt(plan.ok.leftover)} {unit}
+                          </dd>
+                        </>
+                      )}
+                      {plan.ok.largest_pct_of_depth != null && (
+                        <>
+                          <dt>
+                            Est. slip per slice <Hint>Adding one side of the pool moves its price a little. Smaller slices slip less.</Hint>
+                          </dt>
+                          <dd className={plan.ok.largest_pct_of_depth > 2 ? "warn" : ""}>
+                            ~{((100 * plan.ok.slices[0].denom) / (plan.ok.slices[0].denom + depth)).toFixed(2)}%
+                          </dd>
+                        </>
+                      )}
+                      <dt>Timing privacy</dt>
+                      <dd>{SPACING.find(([v]) => v === form.jitter)?.[3]}</dd>
+                    </dl>
+                  </>
                 )}
                 {!plan.error && plan.ok.total_needed > shielded && (
                   <p className="warn">
-                    You have {fmt(shielded)} {unit} shielded. Add funds first.
+                    You have {fmt(shielded)} {unit} shielded. Lower the amount or add funds first.
                   </p>
                 )}
 
                 {confirm === "add" ? (
                   <div className="confirm">
                     <p>
-                      {plan.ok.slices.length} slices of {fmt(plan.ok.slices[0].denom, 2)} {unit} will each be funded from your shielded
-                      balance and added to THORChain at their own random time.
+                      {plan.ok.slices.length} slices of {fmt(plan.ok.slices[0].denom, 2)} {unit}, each funded from your shielded balance
+                      and added to THORChain at its own random time.
                       {!sim && network === "main" ? " This moves real ZEC." : ""}
                     </p>
                     <button type="button" className="btn primary" onClick={addPrivately}>
@@ -628,20 +788,26 @@ export default function App() {
                 <dl className="summary">
                   <dt>In the pool</dt>
                   <dd>
-                    {fmt(agg?.deposited_zat, 4)} {unit}
+                    {fmt(deposited, 4)} {unit}
                   </dd>
-                  <dt>Redeemable</dt>
+                  <dt>Value now</dt>
                   <dd>
-                    {fmt(agg?.redeemable_zat, 4)} {unit}
+                    {fmt(redeemable, 4)} {unit}
                   </dd>
-                  <dt>Slices to withdraw</dt>
-                  <dd>{lpActive}</dd>
-                  <dt>Exit fee per slice</dt>
-                  <dd>{pool ? `~${fmt(pool.outbound_fee, 5)} ZEC` : "—"}</dd>
+                  <dt>
+                    Exit fees <Hint>THORChain&apos;s outbound fee plus two Zcash transactions (withdraw, shield back) per slice.</Hint>
+                  </dt>
+                  <dd>
+                    −{fmt(exitFees)} {unit}
+                  </dd>
+                  <dt className="total">You get back, shielded</dt>
+                  <dd className="total">
+                    ≈ {fmt(Math.max(0, redeemable - exitFees))} {unit}
+                  </dd>
                 </dl>
                 <p className="muted small">
-                  Each slice withdraws from its own address at a random time, then the proceeds are shielded to a fresh Ironwood
-                  address.
+                  {lpActive} slice{lpActive === 1 ? "" : "s"} withdraw from their own addresses at random times, then the proceeds go to
+                  a fresh Ironwood address.
                 </p>
                 {confirm === "exit" ? (
                   <div className="confirm">
@@ -654,7 +820,7 @@ export default function App() {
                   </div>
                 ) : (
                   <button className="btn primary" disabled={!lpActive} onClick={() => setConfirm("exit")}>
-                    Withdraw all and shield
+                    {lpActive ? "Withdraw all and shield" : "Nothing to withdraw yet"}
                   </button>
                 )}
               </div>

@@ -77,29 +77,77 @@ pre,
 
 .chart figcaption {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 10px;
+  align-items: flex-end;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.chart-now {
+  display: grid;
+  gap: 4px;
 }
 
 .chart-label {
   color: var(--dim);
   font-size: 0.875rem;
+  font-weight: 700;
 }
 
 .chart-value {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 12px;
   font-family: var(--display), Impact, sans-serif;
-  font-size: 1.75rem;
+  font-size: 2.5rem;
   line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
-.chart-value small {
-  margin-left: 8px;
+.chart-value b {
+  white-space: nowrap;
+  font-family: var(--sans), sans-serif;
+  font-size: 0.9375rem;
+  font-weight: 800;
+}
+
+.up {
+  color: var(--good);
+}
+
+.down {
+  color: var(--bad);
+}
+
+.flat {
+  color: var(--dim);
+}
+
+.chart-when {
   font-family: var(--mono), monospace;
   font-size: 0.75rem;
   color: var(--dim);
+}
+
+.chart-hl {
+  display: flex;
+  gap: 20px;
+  margin: 0;
+  text-align: right;
+}
+
+.chart-hl dt {
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.chart-hl dd {
+  margin: 2px 0 0;
+  font-weight: 800;
+  font-size: 0.9375rem;
+  font-variant-numeric: tabular-nums;
 }
 
 .chart-plot {
@@ -128,6 +176,11 @@ pre,
 }
 
 .chart-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  margin: 0;
   color: var(--dim);
   font-size: 0.875rem;
 }

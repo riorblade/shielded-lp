@@ -1,6 +1,9 @@
 ...@_theme
 
-direction: right
+grid-rows: 2
+grid-columns: 3
+horizontal-gap: 170
+vertical-gap: 110
 
 classes: {
   phase: {
@@ -11,7 +14,7 @@ classes: {
       border-radius: 14
       font-color: "#F6F4FB"
       font: mono
-      font-size: 15
+      font-size: 19
     }
   }
   step: {
@@ -19,23 +22,28 @@ classes: {
       stroke: "#F4B728"
       stroke-width: 2
       font-color: "#A19EB4"
-      font-size: 15
+      font-size: 18
     }
   }
 }
 
-fund: "1 FUND\n\nPLANNED\nFUNDING_SENT\nFUNDED" {class: phase}
-join: "2 JOIN POOL\n\nADD_SENT" {class: phase}
+fund: "1 FUND\n\nPLANNED\nFUNDING_SENT\nFUNDED" {class: phase; width: 260; height: 150}
+join: "2 JOIN POOL\n\nADD_SENT" {class: phase; width: 260; height: 150}
 earn: "3 EARNING\n\nLP_ACTIVE" {
   class: phase
+  width: 260
+  height: 150
   style: {fill: "#2ED8B6"; stroke: "#2ED8B6"; font-color: "#0D0C14"; bold: true}
 }
-withdraw: "4 WITHDRAW\n\nWD_SENT\nWD_RECEIVED" {class: phase}
+spacer: "" {width: 260; height: 150; style.opacity: 0}
 shield: "5 SHIELD BACK\n\nSHIELD_SENT\nCLOSED" {
   class: phase
+  width: 260
+  height: 150
   style: {fill: "#F4B728"; stroke: "#F4B728"; font-color: "#0D0C14"; bold: true}
 }
 
+withdraw: "4 WITHDRAW\n\nWD_SENT\nWD_RECEIVED" {class: phase; width: 260; height: 150}
 fund -> join: "deposit" {class: step}
 join -> earn: "LP seen" {class: step}
 earn -> withdraw: "you exit" {class: step}

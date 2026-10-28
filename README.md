@@ -185,7 +185,7 @@ Each slice moves through a resumable state machine stored in `slices.sqlite`. St
 | CLI `slp` (wallet + our commands) | `crates/slp`, a fork of [zcash-devtool](https://github.com/zcash/zcash-devtool) (MIT/Apache-2.0) |
 | Our Rust code | `crates/slp/src/slp/`: `planner.rs`, `store.rs`, `thor.rs`, `chain.rs`, `mod.rs` |
 | App and landing page | `apps/dashboard` (Next.js) |
-| Diagrams | `docs/diagrams/*.d2`, made with [D2](https://d2lang.com). Re-render with `d2 flow.d2 flow.svg` |
+| Diagrams | `docs/diagrams/*.d2`, made with [D2](https://d2lang.com). Re-render with `cd docs/diagrams && for f in flow architecture states; do d2 $f.d2 $f.svg; done` |
 | Verified facts, endpoints, txids | [`NOTES.md`](NOTES.md) |
 
 ## Tests

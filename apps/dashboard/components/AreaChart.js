@@ -1,11 +1,11 @@
 "use client";
 
 // One-series area chart (TradingView lightweight-charts) with crosshair + tooltip.
-// Series color #B08824 passes the dataviz lightness and contrast checks on the dark surface.
+// Series color #F4B728 (Zcash yellow) passes the dataviz lightness and contrast checks on the dark surface.
 import { AreaSeries, ColorType, CrosshairMode, createChart } from "lightweight-charts";
 import { useEffect, useRef, useState } from "react";
 
-const SERIES = "#B08824";
+const SERIES = "#F4B728";
 
 export default function AreaChart({ points, field, format, height = 260, label, band }) {
   const box = useRef(null);
@@ -18,17 +18,17 @@ export default function AreaChart({ points, field, format, height = 260, label, 
       autoSize: true,
       layout: {
         background: { type: ColorType.Solid, color: "transparent" },
-        textColor: "#8A94A8",
+        textColor: "#A19EB4",
         fontFamily: "inherit",
         attributionLogo: false,
       },
-      grid: { vertLines: { visible: false }, horzLines: { color: "rgba(138,148,168,0.12)" } },
+      grid: { vertLines: { visible: false }, horzLines: { color: "rgba(246,244,251,0.07)" } },
       rightPriceScale: { borderVisible: false },
       timeScale: { borderVisible: false, timeVisible: false },
       crosshair: {
         mode: CrosshairMode.Magnet,
-        vertLine: { color: "rgba(224,185,76,0.5)", labelBackgroundColor: "#1C2640" },
-        horzLine: { color: "rgba(224,185,76,0.35)", labelBackgroundColor: "#1C2640" },
+        vertLine: { color: "rgba(244,183,40,0.6)", labelBackgroundColor: "#201D2C" },
+        horzLine: { color: "rgba(244,183,40,0.4)", labelBackgroundColor: "#201D2C" },
       },
       handleScroll: false,
       handleScale: false,
@@ -36,8 +36,8 @@ export default function AreaChart({ points, field, format, height = 260, label, 
     const series = chart.addSeries(AreaSeries, {
       lineColor: SERIES,
       lineWidth: 2,
-      topColor: "rgba(176,136,36,0.35)",
-      bottomColor: "rgba(176,136,36,0.02)",
+      topColor: "rgba(244,183,40,0.28)",
+      bottomColor: "rgba(244,183,40,0)",
       priceFormat: { type: "custom", formatter: format },
       lastValueVisible: true,
       priceLineVisible: false,

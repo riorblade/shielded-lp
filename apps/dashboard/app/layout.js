@@ -1,9 +1,10 @@
-import { Familjen_Grotesk, IBM_Plex_Mono } from "next/font/google";
+import { Anton, Geist_Mono, Manrope } from "next/font/google";
 import "./globals.css";
 
 // next/font self-hosts the files at build time: the running dashboard makes no font requests.
-const sans = Familjen_Grotesk({ subsets: ["latin"], variable: "--sans" });
-const mono = IBM_Plex_Mono({ subsets: ["latin"], weight: ["400", "500"], variable: "--mono" });
+const display = Anton({ subsets: ["latin"], weight: "400", variable: "--display" });
+const sans = Manrope({ subsets: ["latin"], variable: "--sans" });
+const mono = Geist_Mono({ subsets: ["latin"], variable: "--mono" });
 
 export const metadata = {
   title: "shielded-lp",
@@ -12,7 +13,7 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
+    <html lang="en" className={`${display.variable} ${sans.variable} ${mono.variable}`}>
       <body>{children}</body>
     </html>
   );

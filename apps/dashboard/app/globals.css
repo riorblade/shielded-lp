@@ -1,14 +1,17 @@
 :root {
-  --bg: #070b14;
-  --bg-2: #0d1424;
-  --bg-3: #141d33;
-  --line: rgba(160, 172, 196, 0.16);
-  --text: #eef1f7;
-  --dim: #9aa4b8;
-  --gold: #e0b94c;
-  --gold-deep: #b08824;
-  --good: #4fbf8f;
-  --bad: #e5675f;
+  --ink: #0d0c14;
+  --ink-2: #16141f;
+  --ink-3: #201d2c;
+  --paper: #f6f4fb;
+  --dim: #a19eb4;
+  --line: rgba(246, 244, 251, 0.1);
+  --zec: #f4b728;
+  --thor: #2ed8b6;
+  --violet: #8a7cf8;
+  --orange: #ff8a3d;
+  --pink: #f472b6;
+  --good: #2ed8b6;
+  --bad: #ff6b6b;
   color-scheme: dark;
 }
 
@@ -23,11 +26,11 @@ html {
 html,
 body {
   margin: 0;
-  background: var(--bg);
-  color: var(--text);
+  background: var(--ink);
+  color: var(--paper);
   font-family: var(--sans), system-ui, sans-serif;
   font-size: 16px;
-  line-height: 1.5;
+  line-height: 1.55;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -41,8 +44,16 @@ pre,
   font-family: var(--mono), ui-monospace, monospace;
 }
 
+.display {
+  font-family: var(--display), Impact, sans-serif;
+  font-weight: 400;
+  text-transform: uppercase;
+  line-height: 0.9;
+  letter-spacing: 0;
+}
+
 :focus-visible {
-  outline: 2px solid var(--gold);
+  outline: 2px solid var(--zec);
   outline-offset: 3px;
 }
 
@@ -58,13 +69,10 @@ pre,
   }
 }
 
-/* Shared chart frame */
+/* Chart: no frame, it sits on the page */
 .chart {
   margin: 0;
-  padding: 18px 18px 8px;
-  background: var(--bg-2);
-  border: 1px solid var(--line);
-  border-radius: 18px;
+  min-width: 0;
 }
 
 .chart figcaption {
@@ -72,7 +80,7 @@ pre,
   justify-content: space-between;
   align-items: baseline;
   gap: 12px;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
 }
 
 .chart-label {
@@ -81,20 +89,17 @@ pre,
 }
 
 .chart-value {
-  font-size: 1.25rem;
-  font-weight: 600;
+  font-family: var(--display), Impact, sans-serif;
+  font-size: 1.75rem;
+  line-height: 1;
   font-variant-numeric: tabular-nums;
 }
 
 .chart-value small {
   margin-left: 8px;
+  font-family: var(--mono), monospace;
   font-size: 0.75rem;
-  font-weight: 400;
   color: var(--dim);
-}
-
-.chart {
-  min-width: 0;
 }
 
 .chart-plot {
@@ -106,9 +111,9 @@ pre,
 .chart-band {
   position: absolute;
   inset: 0 56px 26px 0;
-  background: linear-gradient(180deg, rgba(79, 191, 143, 0.1), rgba(79, 191, 143, 0.04));
-  border-top: 1px dashed rgba(79, 191, 143, 0.5);
-  border-bottom: 1px dashed rgba(79, 191, 143, 0.5);
+  background: rgba(46, 216, 182, 0.06);
+  border-top: 1px dashed rgba(46, 216, 182, 0.45);
+  border-bottom: 1px dashed rgba(46, 216, 182, 0.45);
   pointer-events: none;
 }
 
@@ -116,8 +121,9 @@ pre,
   position: absolute;
   left: 10px;
   top: 8px;
+  font-family: var(--mono), monospace;
   font-size: 0.75rem;
-  color: var(--good);
+  color: var(--thor);
   pointer-events: none;
 }
 

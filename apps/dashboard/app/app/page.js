@@ -221,10 +221,10 @@ export default function App() {
   return (
     <div className="app">
       <header className="bar">
-        <Link href="/" className="logo">
-          <svg width="20" height="20" viewBox="0 0 22 22" aria-hidden="true">
-            <path d="M11 1 20 5v6c0 5-4 9-9 10C6 20 2 16 2 11V5z" fill="none" stroke="currentColor" strokeWidth="1.6" />
-            <path d="M7 9h8M7 12h6M7 15h4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+        <Link href="/" className="logo display">
+          <svg width="24" height="24" viewBox="-50 -50 100 100" aria-hidden="true">
+            <circle r="48" fill="#f4b728" />
+            <path d="M-15-14H15L-15 14H15M0-22V-14M0 14V22" fill="none" stroke="#0d0c14" strokeWidth="9" strokeLinejoin="round" />
           </svg>
           shielded-lp
         </Link>
@@ -273,7 +273,7 @@ export default function App() {
                 <Token sym="RUNE" />
               </span>
               <div>
-                <h1>ZEC / RUNE</h1>
+                <h1 className="display">ZEC / RUNE</h1>
                 <p>THORChain native pool · single-sided ZEC</p>
               </div>
             </div>
@@ -292,26 +292,26 @@ export default function App() {
               <section className="stats">
                 <div>
                   <span>Your liquidity</span>
-                  <strong>
+                  <strong className="display">
                     {fmt(agg?.deposited_zat, 4)} {unit}
                   </strong>
                   {pool && network === "main" && <em>{usd(((agg?.deposited_zat ?? 0) / 1e8) * pool.price_usd)}</em>}
                 </div>
                 <div>
                   <span>Redeemable now</span>
-                  <strong>
+                  <strong className="display">
                     {fmt(agg?.redeemable_zat, 4)} {unit}
                   </strong>
                   <em>after slip, before exit fees</em>
                 </div>
                 <div>
                   <span>Unlinked slices</span>
-                  <strong>{agg?.slices_in_lp ?? 0}</strong>
+                  <strong className="display">{agg?.slices_in_lp ?? 0}</strong>
                   <em>each its own address</em>
                 </div>
                 <div>
                   <span>Pool share</span>
-                  <strong>{share ? `${share.toFixed(2)}%` : "—"}</strong>
+                  <strong className="display">{share ? `${share.toFixed(2)}%` : "—"}</strong>
                   <em>{pool ? `of ${fmt(pool.depth_zat, 2)} ZEC` : ""}</em>
                 </div>
               </section>
@@ -352,7 +352,7 @@ export default function App() {
 
               <section className="slices">
                 <div className="sec-head">
-                  <h2>Your slices</h2>
+                  <h2 className="display">Your slices</h2>
                   <div className="sec-actions">
                     {rows.length > 0 &&
                       (data?.running ? (
@@ -391,7 +391,7 @@ export default function App() {
                       return (
                         <li key={slice.id} className={slice.state === "FAILED" ? "failed" : ""}>
                           <div className="s-top">
-                            <span className="s-id">#{slice.id}</span>
+                            <span className="s-id display">#{slice.id}</span>
                             <span className="s-amt">
                               {fmt(slice.denom, 2)} {unit}
                             </span>
@@ -441,7 +441,7 @@ export default function App() {
             </>
           ) : (
             <section className="public">
-              <h2>What anyone can see on Midgard</h2>
+              <h2 className="display">What anyone can see on Midgard</h2>
               <p className="muted">
                 These are your slice addresses as the public sees them: small, separate providers, sorted by address. Nothing
                 here connects them to each other, to your total, or to your shielded wallet.
@@ -664,7 +664,7 @@ export default function App() {
 
           {hasWallet && (
             <div className="box wallet">
-              <h3>Wallet</h3>
+              <h3 className="display">Wallet</h3>
               <dl className="summary">
                 <dt>Shielded, spendable</dt>
                 <dd>
